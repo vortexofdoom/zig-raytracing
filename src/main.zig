@@ -10,9 +10,23 @@ fn writeColor(color: Vec3, writer: anytype) !void {
 }
 
 fn rayColor(ray: *const Ray) Vec3 {
+    const t = hitSphere(Vec3.new(0.0, 0.0, -1.0), 0.5, ray);
+    if (t > 0.0) {
+        const n = Vec3.fromSimd(ray.at(t).toSimd() - SimdV3{0.0, 0.0, -1.0}).normalize();
+        return Vec3.fromSimd(@as(SimdV3, @splat(0.5)) * (n.toSimd() + @as(SimdV3, @splat(1.0))));
+    }
     const unit_dir = ray.dir.normalize();
     const a = 0.5 * (unit_dir.y + 1.0);
     return Vec3.fromSimd(@as(SimdV3, @splat(1.0 - a)) + @as(SimdV3, @splat(a)) * SimdV3{0.5, 0.7, 1.0});
+}
+
+fn hitSphere(center: Vec3, radius: f64, ray: *const Ray) f64 {
+    const oc = Vec3.fromSimd(center.toSimd() - ray.origin.toSimd());
+    const a = ray.dir.lengthSquared();
+    const h = ray.dir.dot(&oc);
+    const c = oc.lengthSquared() - radius * radius;
+    const discriminant = h * h - a * c;
+    return if (discriminant < 0.0) -1.0 else (h - @sqrt(discriminant)) / a;
 }
 
 pub fn main() !void {
@@ -48,7 +62,7 @@ pub fn main() !void {
 
     // Calculate position of upper left pixel
     const viewport_upper_left = Vec3.fromSimd(camera_center.toSimd() - SimdV3{0.0, 0.0, focal_length} - viewport_u.scale(0.5).toSimd() - viewport_v.scale(0.5).toSimd());
-    const pixel00_loc = Vec3.fromSimd(viewport_upper_left.toSimd() + @as(SimdV3, @splat(0.5)) * pixel_delta_u.toSimd() * pixel_delta_v.toSimd());
+    const pixel00_loc = Vec3.fromSimd(viewport_upper_left.toSimd() + @as(SimdV3, @splat(0.5)) * (pixel_delta_u.toSimd() + pixel_delta_v.toSimd()));
 
     // Render
 
@@ -57,7 +71,9 @@ pub fn main() !void {
     for (0..img_height) |j| {
         std.log.info("\rScanlines remaining: {d} ", .{img_height - j});
         for (0..img_width) |i| {
-            const pixel_center = pixel00_loc.toSimd() + (@as(SimdV3, @splat(@floatFromInt(i))) * pixel_delta_u.toSimd()) + (@as(SimdV3, @splat(@floatFromInt(j))) * pixel_delta_v.toSimd());
+            const jvec: SimdV3 = @splat(@floatFromInt(j));
+            const ivec: SimdV3 = @splat(@floatFromInt(i));
+            const pixel_center = pixel00_loc.toSimd() + (ivec * pixel_delta_u.toSimd()) + (jvec * pixel_delta_v.toSimd());
             const ray = Ray.new(camera_center, Vec3.fromSimd(pixel_center - camera_center.toSimd()));
 
             const color = rayColor(&ray);

@@ -55,6 +55,6 @@ pub const Vec3 = packed struct {
     }
 
     pub fn normalize(self: *const Self) Self {
-        return Self.fromSimd(self.toSimd() / @as(SimdV3, @splat(self.length())));
+        return Self.fromSimd(self.toSimd() * @as(SimdV3, @splat(1 / self.length())));
     }
 };
