@@ -36,6 +36,9 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
 
+    const interface = b.dependency("interface", .{}).module("interface.zig");
+    exe.root_module.addImport("interface", interface);
+
     // This declares intent for the executable to be installed into the
     // standard location when the user invokes the "install" step (the default
     // step when running `zig build`).

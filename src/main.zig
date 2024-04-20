@@ -3,30 +3,34 @@ const vec3 = @import("vec3.zig");
 const Vec3 = vec3.Vec3;
 const SimdV3 = vec3.SimdV3;
 const Ray = @import("ray.zig").Ray;
+const hit = @import("hit.zig");
+const Hittable = hit.Hittable;
+const HitRecord = hit.HitRecord;
+const HittableList = hit.HittableList;
+const Rc = @import("rc.zig").RefCounted;
+const Sphere = @import("sphere.zig");
+
+const inf = std.math.inf(f64);
+const pi = std.math.pi;
+const white = SimdV3{ 1.0, 1.0, 1.0 };
+
+
+var gpa_impl = std.heap.GeneralPurposeAllocator(.{}){};
+pub const gpa = gpa_impl.allocator();
 
 fn writeColor(color: Vec3, writer: anytype) !void {
     const byte_colors = @trunc(color.toSimd() * @as(SimdV3, @splat(255.999)));
     try writer.print("{d} {d} {d}\n", .{byte_colors[0], byte_colors[1], byte_colors[2]});
 }
 
-fn rayColor(ray: *const Ray) Vec3 {
-    const t = hitSphere(Vec3.new(0.0, 0.0, -1.0), 0.5, ray);
-    if (t > 0.0) {
-        const n = Vec3.fromSimd(ray.at(t).toSimd() - SimdV3{0.0, 0.0, -1.0}).normalize();
-        return Vec3.fromSimd(@as(SimdV3, @splat(0.5)) * (n.toSimd() + @as(SimdV3, @splat(1.0))));
+fn rayColor(ray: *const Ray, obj: *const Hittable) Vec3 {
+    if (obj.hit(ray, 0, inf)) |rec| {
+        return Vec3.fromSimd(@as(SimdV3, @splat(0.5)) * (rec.normal.toSimd() + white));
     }
+
     const unit_dir = ray.dir.normalize();
     const a = 0.5 * (unit_dir.y + 1.0);
     return Vec3.fromSimd(@as(SimdV3, @splat(1.0 - a)) + @as(SimdV3, @splat(a)) * SimdV3{0.5, 0.7, 1.0});
-}
-
-fn hitSphere(center: Vec3, radius: f64, ray: *const Ray) f64 {
-    const oc = Vec3.fromSimd(center.toSimd() - ray.origin.toSimd());
-    const a = ray.dir.lengthSquared();
-    const h = ray.dir.dot(&oc);
-    const c = oc.lengthSquared() - radius * radius;
-    const discriminant = h * h - a * c;
-    return if (discriminant < 0.0) -1.0 else (h - @sqrt(discriminant)) / a;
 }
 
 pub fn main() !void {
@@ -44,6 +48,19 @@ pub fn main() !void {
     // Calculate height and ensure that it's at least 1
     const img_height_raw: usize = @intFromFloat(@as(f64, img_width) / aspect_ratio);
     const img_height = if (img_height_raw == 0) 1 else img_height_raw;
+
+    // World
+    var world = HittableList.init(gpa);
+    defer world.deinit();
+    try world.add(Sphere {
+        .center = Vec3.new(0.0, 0.0, -1.0),
+        .radius = 0.5,
+    });
+    try world.add(Sphere {
+        .center = Vec3.new(0.0, -100.5, -1),
+        .radius = 100.0,
+    });
+    const hittable = try Hittable.init(world, gpa);
 
     // Camera
 
@@ -76,7 +93,7 @@ pub fn main() !void {
             const pixel_center = pixel00_loc.toSimd() + (ivec * pixel_delta_u.toSimd()) + (jvec * pixel_delta_v.toSimd());
             const ray = Ray.new(camera_center, Vec3.fromSimd(pixel_center - camera_center.toSimd()));
 
-            const color = rayColor(&ray);
+            const color = rayColor(&ray, &hittable);
             try writeColor(color, stdout);
         }
     }
