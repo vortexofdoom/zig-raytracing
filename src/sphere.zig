@@ -1,10 +1,11 @@
 const vec3 = @import("vec3.zig");
 const Vec3 = vec3.Vec3;
-const SimdV3 = vec3.SimdV3;
-const Ray = @import("ray.zig").Ray;
+const SimdV3 = vec3.Vec3;
+const Ray = @import("ray.zig");
 const hittable = @import("hit.zig");
 const Hittable = hittable.Hittable;
 const HitRecord = hittable.HitRecord;
+const Interval = @import("interval.zig");
 
 center: Vec3,
 radius: f64,
@@ -18,26 +19,26 @@ pub fn new(center: Vec3, radius: f64) Self {
     };
 }
 
-pub fn hit(self: *const Self, ray: *const Ray, t_min: f64, t_max: f64) ?HitRecord {
-    const oc = Vec3.fromSimd(self.center.toSimd() - ray.origin.toSimd());
-    const a = ray.dir.lengthSquared();
-    const h = ray.dir.dot(&oc);
-    const c = oc.lengthSquared() - (self.radius * self.radius);
+pub fn hit(self: *const Self, ray: *const Ray, ray_t: Interval) ?HitRecord {
+    const oc = self.center - ray.origin;
+    const a = vec3.lengthSquared(ray.dir);
+    const h = vec3.dot(ray.dir, oc);
+    const c = vec3.lengthSquared(oc) - (self.radius * self.radius);
     const discriminant = h * h - a * c;
-    
+
     if (discriminant < 0.0) return null;
     const sqrtd = @sqrt(discriminant);
     var root: f64 = (h - sqrtd) / a;
-    if (root <= t_min or t_max <= root) {
+    if (!ray_t.surrounds(root)) {
         root = (h + sqrtd) / a;
-        if (root <= t_min or t_max <= root) return null;
+        if (!ray_t.surrounds(root)) return null;
     }
 
     var rec = HitRecord{
         .t = root,
         .p = ray.at(root),
     };
-    const outward_normal = Vec3.fromSimd((rec.p.toSimd() - self.center.toSimd()) / @as(SimdV3, @splat(self.radius)));
-    rec.setFaceNormal(ray, &outward_normal);
+    const outward_normal = (rec.p - self.center) / vec3.vec3s(self.radius);
+    rec.setFaceNormal(ray, outward_normal);
     return rec;
 }

@@ -1,60 +1,49 @@
-pub const SimdV3 = @Vector(3, f64);
+pub const Vec3 = @Vector(3, f64);
 
-pub const Vec3 = packed struct {
-    x: f64 = 0.0,
-    y: f64 = 0.0,
-    z: f64 = 0.0,
+vec: Vec3,
 
-    const Self = @This();
+pub fn vec3s(val: f64) Vec3 {
+    return @splat(val);
+}
 
-    pub fn new(x: f64, y: f64, z: f64) Self {
-        return Self{
-            .x = x,
-            .y = y,
-            .z = z,
-        };
-    }
+pub const Vec3Component = enum { x, y, z };
 
-    pub fn toSimd(self: *const Self) SimdV3 {
-        return @bitCast(self.*);
-    }
+pub inline fn swizzle(
+    v: Vec3,
+    comptime x: Vec3Component,
+    comptime y: Vec3Component,
+    comptime z: Vec3Component,
+) Vec3 {
+    return @shuffle(f64, v, undefined, [4]i32{ @intFromEnum(x), @intFromEnum(y), @intFromEnum(z) });
+}
 
-    pub fn fromSimd(vec: SimdV3) Self {
-        return @bitCast(vec);
-    }
+pub inline fn length(vec: Vec3) f64 {
+    return @sqrt(lengthSquared(vec));
+}
 
-    pub fn length(self: *const Self) f64 {
-        return @sqrt(self.lengthSquared());
-    }
+pub inline fn lengthSquared(vec: Vec3) f64 {
+    return dot(vec, vec);
+}
 
-    pub fn lengthSquared(self: *const Self) f64 {
-        return self.dot(self);
-    }
+pub fn print(vec: Vec3, writer: anytype) !void {
+    try writer.print("{d} {d} {d}", .{ vec[0], vec[1], vec[2] });
+}
 
-    pub fn print(self: *const Self, writer: anytype) !void {
-        try writer.print("{d} {d} {d}", .{self.x, self.y, self.z});
-    }
+// There are better ways if you never need it as a scalar
+// see https://github.com/ziglang/zig/issues/4961#issuecomment-610050227
+pub inline fn dot(u: Vec3, v: Vec3) f64 {
+    return @reduce(.Add, u * v);
+}
 
-    pub fn scale(self: *const Self, amt: f64) Self {
-        return Self.fromSimd(self.toSimd() * @as(SimdV3, @splat(amt)));
-    }
+pub inline fn cross(u: Vec3, v: Vec3) Vec3 {
+    var a = swizzle(u, .y, .z, .x);
+    var b = swizzle(v, .z, .x, .y);
+    const res = a * b;
+    a = swizzle(a, .y, .z, .x);
+    b = swizzle(b, .z, .x, .y);
+    return res - a * b;
+}
 
-    // There are better ways
-    // see https://github.com/ziglang/zig/issues/4961#issuecomment-610050227
-    pub fn dot(u: *const Self, v: *const Self) f64 {
-        return @reduce(.Add, u.toSimd() * v.toSimd());
-    }
-
-    // Maybe a SIMD way to do this
-    pub fn cross(u: *const Self, v: *const Self) Self {
-        return Self{
-            .x = u.y * v.z - u.z * v.y,
-            .y = u.z * v.x - u.x * v.z,
-            .z = u.x * v.y - u.y * v.x,
-        };
-    }
-
-    pub fn normalize(self: *const Self) Self {
-        return Self.fromSimd(self.toSimd() * @as(SimdV3, @splat(1 / self.length())));
-    }
-};
+pub inline fn normalize(v: Vec3) Vec3 {
+    return v / vec3s(length(v));
+}
