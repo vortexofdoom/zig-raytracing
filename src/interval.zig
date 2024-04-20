@@ -1,5 +1,5 @@
 const std = @import("std");
-const inf = std.math.inf(f64);
+const inf = @import("util.zig").inf;
 
 pub const universe = Self.new(-inf, inf);
 
@@ -13,6 +13,12 @@ pub fn new(min: f64, max: f64) Self {
         .min = min,
         .max = max,
     };
+}
+
+pub fn clamp(self: *const Self, x: f64) f64 {
+    if (x < self.min) return self.min;
+    if (x > self.max) return self.max;
+    return x;
 }
 
 pub fn contains(self: *const Self, x: f64) bool {

@@ -6,7 +6,7 @@ pub fn vec3s(val: f64) Vec3 {
     return @splat(val);
 }
 
-pub const Vec3Component = enum { x, y, z };
+const Vec3Component = enum { x, y, z };
 
 pub inline fn swizzle(
     v: Vec3,
@@ -14,7 +14,7 @@ pub inline fn swizzle(
     comptime y: Vec3Component,
     comptime z: Vec3Component,
 ) Vec3 {
-    return @shuffle(f64, v, undefined, [4]i32{ @intFromEnum(x), @intFromEnum(y), @intFromEnum(z) });
+    return @shuffle(f64, v, undefined, [3]i32{ @intFromEnum(x), @intFromEnum(y), @intFromEnum(z) });
 }
 
 pub inline fn length(vec: Vec3) f64 {

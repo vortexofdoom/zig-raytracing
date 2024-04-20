@@ -20,6 +20,7 @@ var gpa_impl = std.heap.GeneralPurposeAllocator(.{}){};
 pub const gpa = gpa_impl.allocator();
 
 pub fn main() !void {
+    @import("util.zig").init();
     // stdout is for the actual output of your application, for example if you
     // are implementing gzip, then only the compressed bytes should be sent to
     // stdout, not any debugging messages.
@@ -41,7 +42,10 @@ pub fn main() !void {
     defer hittable.deinit();
 
     // Camera
-    var camera = Camera.init();
+    var camera = Camera{};
+    camera.aspect_ratio = 16.0 / 9.0;
+    camera.img_width = 400;
+    camera.samples_per_pixel = 100;
     try camera.render(&hittable, stdout);
 
     try bw.flush(); // don't forget to flush!
