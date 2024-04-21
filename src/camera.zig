@@ -11,16 +11,32 @@ const util = @import("util.zig");
 const inf = util.inf;
 const rand = util.rand;
 
+/// Ratio of image width to height
 aspect_ratio: f64 = 1.0,
+/// Rendered image width in pixels
 img_width: usize = 100,
+/// Count of random samples for each pixel
 samples_per_pixel: usize = 10,
+/// Color scale factor for sum of pixel samples
 pixel_samples_scale: f64 = undefined,
+/// Rendered image height in pixels
 img_height: usize = undefined,
+/// Camera center
 center: Vec3 = undefined,
+/// Location of pixel 0, 0 (top-left)
 pixel00_loc: Vec3 = undefined,
+/// Offset of each pixel to its right neighbor
 pixel_delta_u: Vec3 = undefined,
+/// Offset of each pixel to its neighbor below
 pixel_delta_v: Vec3 = undefined,
+/// Maximum number of bounces per ray
 max_depth: usize = 10,
+/// Vertical view angle
+vfov: f64 = 90.0,
+look_from: Vec3,
+look_at: Vec3,
+/// Camera-relative up
+vup: Vec3,
 
 const Self = @This();
 
@@ -91,20 +107,30 @@ pub fn init(self: *Self) void {
     const img_height_f: f64 = @floatFromInt(self.img_height);
     self.pixel_samples_scale = 1.0 / @as(f64, @floatFromInt(self.samples_per_pixel));
 
-    const focal_length = 1.0;
-    const viewport_height = 2.0;
+    self.center = self.look_from;
+
+    const focal_length = vec3.length(self.look_from - self.look_at);
+    const theta = std.math.degreesToRadians(self.vfov);
+    const h = @tan(theta / 2);
+    const viewport_height = 2.0 * h * focal_length;
     const viewport_width = viewport_height * (img_width_f / img_height_f);
 
-    self.center = vec3s(0.0);
+    const w = normalize(self.look_from - self.look_at);
+    const u = normalize(vec3.cross(self.vup, w));
+    const v = vec3.cross(w, u);
+
     // Calculate horizontal and vertical viewport edges
-    const viewport_u = Vec3{ viewport_width, 0.0, 0.0 };
-    const viewport_v = Vec3{ 0.0, -viewport_height, 0.0 };
+    const viewport_u = vec3s(viewport_width) * u;
+    const viewport_v = vec3s(viewport_height) * -v;
 
     // Calculate delta vectors from pixel to pixel
     self.pixel_delta_u = viewport_u / vec3s(img_width_f);
     self.pixel_delta_v = viewport_v / vec3s(img_height_f);
 
     // Calculate position of upper left pixel
-    const viewport_upper_left = self.center - Vec3{ 0.0, 0.0, focal_length } - viewport_u * vec3s(0.5) - viewport_v * vec3s(0.5);
+    const viewport_upper_left = self.center 
+        - (vec3s(focal_length) * w) 
+        - (viewport_u / vec3s(2.0)) 
+        - (viewport_v / vec3s(2.0));
     self.pixel00_loc = viewport_upper_left + vec3s(0.5) * (self.pixel_delta_u + self.pixel_delta_v);
 }
