@@ -91,6 +91,7 @@ fn getRay(self: *const Self, i: usize, j: usize) Ray {
     return Ray{
         .origin = origin,
         .dir = pixel_sample - origin,
+        .time = rand(),
     };
 }
 

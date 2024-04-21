@@ -65,8 +65,8 @@ pub fn main() !void {
     });
     const mat_ground = try Material.init(Lambertian{ .albedo = Vec3{0.5, 0.5, 0.5}}, gpa);
     try world.add(Sphere{
-        .center = Vec3{ 0.0, -100.5, -1 },
-        .radius = 100.0,
+        .center = Vec3{ 0.0, -1000.0, -1.0 },
+        .radius = 1000.0,
         .mat = mat_ground,
     });
 
@@ -88,6 +88,7 @@ pub fn main() !void {
                 ) else try Material.init(Dielectric{ .refraction_idx = 1.5 }, gpa);
                 try world.add(Sphere{
                     .center = center,
+                    .center_mov = Vec3{0.0, util.randRange(0.0, 0.5), 0.0},
                     .radius = 0.2,
                     .mat = mat,
                 });
@@ -101,11 +102,11 @@ pub fn main() !void {
     // Camera
     var camera = Camera{
         .aspect_ratio = 16.0 / 9.0,
-        .img_width = 1200,
-        .samples_per_pixel = 500,
+        .img_width = 400,
+        .samples_per_pixel = 100,
         .max_depth = 50.0,
         .vfov = 20.0,
-        .look_from = Vec3{13.0, 12.0, 3.0},
+        .look_from = Vec3{13.0, 2.0, 3.0},
         .look_at = Vec3{0.0, 0.0, 0.0},
         .vup = Vec3{0.0, 1.0, 0.0},
         .defocus_angle = 0.6,
@@ -115,4 +116,97 @@ pub fn main() !void {
     try camera.render(&hittable, stdout);
 
     try bw.flush(); // don't forget to flush!
+}
+
+test "test_deinit" {
+    const ta = std.testing.allocator;
+
+    @import("util.zig").init();
+    const Writer = struct {
+        pub fn print(_: @This(), _: []const u8, _: anytype) !void {}
+    };
+
+
+    // World
+    var world = HittableList.init(ta);
+
+    const mat1 = try Material.init(Dielectric{.refraction_idx = 1.50}, ta);
+    try world.add(Sphere{
+        .center = Vec3{0.0, 1.0, 0.0},
+        .radius = 1.0,
+        .mat = mat1,
+    });
+    const mat2 = try Material.init(Lambertian{ .albedo = Vec3{0.4, 0.2, 0.1}}, ta);
+    try world.add(Sphere{
+        .center = Vec3{-4.0, 1.0, 0.0},
+        .radius = 1.0,
+        .mat = mat2,
+    });
+    const mat3 = try Material.init(
+        Metal{ 
+            .albedo = Vec3{0.7, 0.6, 0.5},
+            .fuzz = 0.0,
+        },
+        ta
+    );
+    try world.add(Sphere{
+        .center = Vec3{4.0, 1.0, 0.0},
+        .radius = 1.0,
+        .mat = mat3,
+    });
+    const mat_ground = try Material.init(Lambertian{ .albedo = Vec3{0.5, 0.5, 0.5}}, ta);
+    try world.add(Sphere{
+        .center = Vec3{ 0.0, -1000.0, -1.0 },
+        .radius = 1000.0,
+        .mat = mat_ground,
+    });
+
+    // var a: f64 = -4.0;
+    // while (a < 4.0) : (a += 1.0) {
+    //     var b: f64 = -4.0;
+    //     while (b < 4.0) : (b += 1.0) {
+    //         const choose_mat = rand();
+    //         const center = Vec3{ a + 0.9 * rand(), 0.2, b + 0.9 * rand()};
+    //         if (vec3.length(center - Vec3{4.0, 0.2, 0.0}) > 0.9) {
+    //             const mat = if (choose_mat < 0.8) try Material.init(
+    //                 Lambertian{ .albedo = vec3.random() * vec3.random()}, ta)
+    //             else if (choose_mat < 0.95) try Material.init(
+    //                 Metal{
+    //                     .albedo = vec3.randomRange(0.5, 1.0), 
+    //                     .fuzz = util.randRange(0.0, 0.5),
+    //                 },
+    //                 ta,
+    //             ) else try Material.init(Dielectric{ .refraction_idx = 1.5 }, ta);
+    //             try world.add(Sphere{
+    //                 .center = center,
+    //                 .center_mov = center + Vec3{0.0, util.randRange(0.0, 0.5), 0.0},
+    //                 .radius = 0.2,
+    //                 .mat = mat,
+    //             });
+    //         }
+    //     }
+    // }
+    
+    var hittable = try Hittable.init(world, ta);
+    defer hittable.deinit();
+
+    // Camera
+    var camera = Camera{
+        .aspect_ratio = 16.0 / 9.0,
+        .img_width = 40,
+        .samples_per_pixel = 5,
+        .max_depth = 10.0,
+        .vfov = 20.0,
+        .look_from = Vec3{13.0, 2.0, 3.0},
+        .look_at = Vec3{0.0, 0.0, 0.0},
+        .vup = Vec3{0.0, 1.0, 0.0},
+        .defocus_angle = 0.6,
+        .focus_dist = 10.0,
+    };
+
+    try camera.render(&hittable, Writer{});
+    try std.testing.expectEqual(1, mat1.tagged_data_ptr.ref_count);
+    try std.testing.expectEqual(1, mat2.tagged_data_ptr.ref_count);
+    try std.testing.expectEqual(1, mat3.tagged_data_ptr.ref_count);
+    try std.testing.expectEqual(1, mat_ground.tagged_data_ptr.ref_count);
 }

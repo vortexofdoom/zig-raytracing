@@ -65,9 +65,9 @@ pub const HittableList = struct {
     pub fn hit(self: *const Self, ray: Ray, ray_t: Interval) ?HitRecord {
         var hit_record: ?HitRecord = null;
         var closest = ray_t.max;
-
         for (self.list.items) |*obj| {
             if (obj.hit(ray, Interval.new(ray_t.min, closest))) |rec| {
+                if (hit_record) |hr| Material.deinit(hr.mat);
                 closest = rec.t;
                 hit_record = rec;
             }

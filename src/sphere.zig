@@ -10,6 +10,7 @@ const Material = @import("material.zig").Material;
 const Rc = @import("rc.zig").RefCounted;
 
 center: Vec3,
+center_mov: ?Vec3 = null,
 radius: f64,
 mat: Rc(Material),
 
@@ -23,11 +24,15 @@ pub fn new(center: Vec3, radius: f64) Self {
 }
 
 pub fn deinit(self: *Self) void {
-    self.mat.deinit();
+    Material.deinit(self.mat);
+}
+
+fn centerAt(self: *Self, t: f64) Vec3 {
+    return if (self.center_mov) |c2| self.center + vec3.vec3s(t) * c2 else self.center;
 }
 
 pub fn hit(self: *Self, ray: Ray, ray_t: Interval) ?HitRecord {
-    const oc = self.center - ray.origin;
+    const oc = self.centerAt(ray.time) - ray.origin;
     const a = vec3.lengthSquared(ray.dir);
     const h = vec3.dot(ray.dir, oc);
     const c = vec3.lengthSquared(oc) - (self.radius * self.radius);

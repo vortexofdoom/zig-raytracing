@@ -23,33 +23,38 @@ pub const Material = struct {
 
     pub fn init(obj: anytype, allocator: @import("std").mem.Allocator) !Rc(Material) {
         const rc = try Rc(Material).init(allocator);
-        rc.tagged_data_ptr.data =  Material{
+        rc.tagged_data_ptr.data = Material{
             .iface = try IFace.init(obj, allocator),
         };
         return rc;
     }
 
     pub fn scatter(self: *const Material, ray: Ray, rec: HitRecord) ?Scatter {
-        defer rec.mat.deinit();
+        defer Material.deinit(rec.mat);
         return self.iface.call("scatter", .{ ray, rec });
     }
 
-    pub fn deinit(self: *const Material) void {
-        self.iface.deinit();
+    pub fn deinit(rc: Rc(Material)) void {
+        if (rc.tagged_data_ptr.ref_count == 1) rc.weakRef().iface.deinit();
+        rc.deinit();
     }
 };
 
 pub const Lambertian = struct {
     albedo: Vec3,
 
-    pub fn scatter(self: *const Lambertian, _: Ray, rec: HitRecord) ?Scatter {
+    pub fn scatter(self: *const Lambertian, in: Ray, rec: HitRecord) ?Scatter {
         var scatter_dir: Vec3 = rec.normal + vec3.randomUnitVec();
         // Catch degenerate scatter direction
         if (@reduce(.And, @abs(scatter_dir) < vec3.vec3s(1e-8))) scatter_dir = rec.normal;
 
         return Scatter {
-            .ray = Ray{.origin = rec.p, .dir = scatter_dir},
             .attenuation = self.albedo,
+            .ray = Ray{
+                .origin = rec.p,
+                .dir = scatter_dir,
+                .time = in.time,
+            },
         };
     }
 };
@@ -63,8 +68,12 @@ pub const Metal = struct {
         reflected = vec3.normalize(reflected) + vec3.vec3s(self.fuzz) * vec3.randomUnitVec();
         const out = Ray{.origin = rec.p, .dir = reflected};
         return if (vec3.dot(out.dir, reflected) > 0.0) Scatter {
-            .ray = Ray{.origin = rec.p, .dir = reflected},
             .attenuation = self.albedo,
+            .ray = Ray{
+                .origin = rec.p,
+                .dir = reflected,
+                .time = in.time,
+            },
         } else null;
     }
 };
@@ -84,7 +93,11 @@ pub const Dielectric = struct {
             vec3.refract(unit_dir, rec.normal, ri);
         return Scatter{
             .attenuation = vec3.vec3s(1.0),
-            .ray = Ray{.origin = rec.p, .dir = dir},
+            .ray = Ray{
+                .origin = rec.p,
+                .dir = dir,
+                .time = in.time
+            },
         };
     }
 

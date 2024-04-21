@@ -8,7 +8,7 @@ pub fn RefCounted(comptime T: type) type {
         pub const TaggedData = struct {
             // TODO: Figure out a way to not have to separately allocate the data.
             data: T,
-            ref_count_ptr: usize,
+            ref_count: usize,
             allocator: mem.Allocator,
         };
 
@@ -19,7 +19,7 @@ pub fn RefCounted(comptime T: type) type {
 
             tagged_data_ptr.* = TaggedData{
                 .data = undefined,
-                .ref_count_ptr = 1,
+                .ref_count = 1,
                 .allocator = allocator,
             };
 
@@ -29,15 +29,15 @@ pub fn RefCounted(comptime T: type) type {
         }
 
         pub fn deinit(self: *const Self) void {
-            self.tagged_data_ptr.ref_count_ptr -= 1;
-            if (self.tagged_data_ptr.ref_count_ptr == 0) {
-                const allocator = self.tagged_data_ptr.allocator;
-                allocator.destroy(self.tagged_data_ptr);
+            const ptr = self.tagged_data_ptr;
+            ptr.ref_count -= 1;
+            if (ptr.ref_count == 0) {
+                ptr.allocator.destroy(ptr);
             }
         }
 
         pub fn strongRef(self: *const Self) Self {
-            self.tagged_data_ptr.ref_count_ptr += 1;
+            self.tagged_data_ptr.ref_count += 1;
             return Self{
                 .tagged_data_ptr = self.tagged_data_ptr,
             };

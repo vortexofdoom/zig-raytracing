@@ -6,6 +6,7 @@ const Self = @This();
 
 origin: Vec3 = undefined,
 dir: Vec3 = undefined,
+time: f64 = 0.0,
 
 pub fn new(origin: Vec3, dir: Vec3) Self {
     return Self{
