@@ -78,3 +78,10 @@ pub inline fn normalize(v: Vec3) Vec3 {
 pub inline fn reflect(v: Vec3, n: Vec3) Vec3 {
     return v - vec3s(2.0 * dot(v, n)) * n;
 }
+
+pub inline fn refract(uv: Vec3, n: Vec3, etai_over_etat: f64) Vec3 {
+    const cos_theta = @min(dot(-uv, n), 1.0);
+    const out_perp = vec3s(etai_over_etat) * (uv + vec3s(cos_theta) * n);
+    const out_para = vec3s(-@sqrt(@abs(1.0 - lengthSquared(out_perp)))) * n;
+    return out_perp + out_para;
+}

@@ -15,6 +15,7 @@ const material = @import("material.zig");
 const Material = material.Material;
 const Lambertian = material.Lambertian;
 const Metal = material.Metal;
+const Dielectric = material.Dielectric;
 
 const inf = std.math.inf(f64);
 const pi = std.math.pi;
@@ -35,10 +36,11 @@ pub fn main() !void {
     const mat_ground = try Material.init(Lambertian{ .albedo = Vec3{0.8, 0.8, 0.0}}, gpa);
     const mat_center = try Material.init(Lambertian{ .albedo = Vec3{0.1, 0.2, 0.5}}, gpa);
     const mat_left = try Material.init(
-        Metal{ 
-            .albedo = Vec3{0.8, 0.8, 0.8},
-            .fuzz = 0.3,
-        },
+        Dielectric{.refraction_idx = 1.50},
+        gpa
+    );
+    const mat_bubble = try Material.init(
+        Dielectric{.refraction_idx = 1.00 / 1.50},
         gpa
     );
     const mat_right = try Material.init(
@@ -60,6 +62,11 @@ pub fn main() !void {
         .center = Vec3{ -1.0, 0.0, -1.0 },
         .radius = 0.5,
         .mat = mat_left,
+    });
+    try world.add(Sphere{
+        .center = Vec3{ -1.0, 0.0, -1.0 },
+        .radius = 0.4,
+        .mat = mat_bubble,
     });
     try world.add(Sphere{
         .center = Vec3{ 1.0, 0.0, -1.0 },

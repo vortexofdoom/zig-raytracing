@@ -7,6 +7,7 @@ const vec3 = @import("vec3.zig");
 const Vec3 = vec3.Vec3;
 const Ray = @import("ray.zig");
 const Rc = @import("rc.zig").RefCounted;
+const rand = @import("util.zig").rand;
 
 pub const Scatter = struct {
     attenuation: Vec3,
@@ -65,5 +66,31 @@ pub const Metal = struct {
             .ray = Ray{.origin = rec.p, .dir = reflected},
             .attenuation = self.albedo,
         } else null;
+    }
+};
+
+pub const Dielectric = struct {
+    refraction_idx: f64,
+
+    pub fn scatter(self: *const Dielectric, in: Ray, rec: HitRecord) ?Scatter {
+        const ri = if (rec.front) 1.0 / self.refraction_idx else self.refraction_idx;
+        const unit_dir = vec3.normalize(in.dir);
+        const cos_theta = @min(vec3.dot(-unit_dir, rec.normal), 1.0);
+        const sin_theta = @sqrt(1.0 - cos_theta * cos_theta);
+        const cant_refract = ri * sin_theta > 1.0;
+        const dir = if (cant_refract or reflectance(cos_theta, ri) > rand())
+            vec3.reflect(unit_dir, rec.normal) 
+        else 
+            vec3.refract(unit_dir, rec.normal, ri);
+        return Scatter{
+            .attenuation = vec3.vec3s(1.0),
+            .ray = Ray{.origin = rec.p, .dir = dir},
+        };
+    }
+
+    fn reflectance(cos: f64, refract_idx: f64) f64 {
+        const r0 = (1.0 - refract_idx) / (1.0 + refract_idx);
+        const r1 = r0 * r0;
+        return r1 + (1.0 - r1) * @import("std").math.pow(f64, 1 - cos, 5);
     }
 };
