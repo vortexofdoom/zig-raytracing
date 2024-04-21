@@ -11,6 +11,10 @@ const Rc = @import("rc.zig").RefCounted;
 const Sphere = @import("sphere.zig");
 const Interval = @import("interval.zig");
 const Camera = @import("camera.zig");
+const material = @import("material.zig");
+const Material = material.Material;
+const Lambertian = material.Lambertian;
+const Metal = material.Metal;
 
 const inf = std.math.inf(f64);
 const pi = std.math.pi;
@@ -28,17 +32,46 @@ pub fn main() !void {
     var bw = std.io.bufferedWriter(stdout_file);
     const stdout = bw.writer();
 
+    const mat_ground = try Material.init(Lambertian{ .albedo = Vec3{0.8, 0.8, 0.0}}, gpa);
+    const mat_center = try Material.init(Lambertian{ .albedo = Vec3{0.1, 0.2, 0.5}}, gpa);
+    const mat_left = try Material.init(
+        Metal{ 
+            .albedo = Vec3{0.8, 0.8, 0.8},
+            .fuzz = 0.3,
+        },
+        gpa
+    );
+    const mat_right = try Material.init(
+        Metal{ 
+            .albedo = Vec3{0.8, 0.6, 0.2},
+            .fuzz = 1.0,
+        },
+        gpa
+    );
+
     // World
     var world = HittableList.init(gpa);
     try world.add(Sphere{
-        .center = Vec3{ 0.0, 0.0, -1.0 },
+        .center = Vec3{ 0.0, 0.0, -1.2 },
         .radius = 0.5,
+        .mat = mat_center,
+    });
+    try world.add(Sphere{
+        .center = Vec3{ -1.0, 0.0, -1.0 },
+        .radius = 0.5,
+        .mat = mat_left,
+    });
+    try world.add(Sphere{
+        .center = Vec3{ 1.0, 0.0, -1.0 },
+        .radius = 0.5,
+        .mat = mat_right,
     });
     try world.add(Sphere{
         .center = Vec3{ 0.0, -100.5, -1 },
         .radius = 100.0,
+        .mat = mat_ground,
     });
-    const hittable = try Hittable.init(world, gpa);
+    var hittable = try Hittable.init(world, gpa);
     defer hittable.deinit();
 
     // Camera

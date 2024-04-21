@@ -20,18 +20,18 @@ center: Vec3 = undefined,
 pixel00_loc: Vec3 = undefined,
 pixel_delta_u: Vec3 = undefined,
 pixel_delta_v: Vec3 = undefined,
+max_depth: usize = 10,
 
 const Self = @This();
 
 fn writeColor(color: Vec3, writer: anytype) !void {
-    const min = vec3s(0.000);
-    const max = vec3s(0.999);
-    const clamp = @min(max, @max(min, color));
+    const gamma = @sqrt(@max(vec3s(0.0), color));
+    const clamp = @min(vec3s(0.999), gamma);
     const byte_colors = @trunc(clamp * vec3s(256.0));
     try writer.print("{d} {d} {d}\n", .{ byte_colors[0], byte_colors[1], byte_colors[2] });
 }
 
-pub fn render(self: *Self, obj: *const Hittable, writer: anytype) !void {
+pub fn render(self: *Self, obj: *Hittable, writer: anytype) !void {
     self.init();
 
     try writer.print("P3\n{d} {d}\n255\n", .{ self.img_width, self.img_height });
@@ -42,7 +42,7 @@ pub fn render(self: *Self, obj: *const Hittable, writer: anytype) !void {
             var pixel_color = vec3s(0.0);
             for (0..self.samples_per_pixel) |_| {
                 const ray = self.getRay(i, j);
-                pixel_color += rayColor(&ray, obj);
+                pixel_color += rayColor(ray, self.max_depth, obj);
             }
             try writeColor(pixel_color * vec3s(self.pixel_samples_scale), writer);
         }
@@ -52,6 +52,10 @@ pub fn render(self: *Self, obj: *const Hittable, writer: anytype) !void {
 
 fn sampleSquare() Vec3 {
     return Vec3{rand() - 0.5, rand() - 0.5, 0.0};
+}
+
+inline fn linearToGamma(linear: f64) f64 {
+    return if (linear > 0.0) @sqrt(linear) else 0.0;
 }
 
 fn getRay(self: *const Self, i: usize, j: usize) Ray {
@@ -66,9 +70,13 @@ fn getRay(self: *const Self, i: usize, j: usize) Ray {
     };
 }
 
-pub fn rayColor(ray: *const Ray, obj: *const Hittable) Vec3 {
-    if (obj.hit(ray, Interval.new(0, inf))) |rec| {
-        return vec3s(0.5) * (rec.normal + white);
+pub fn rayColor(ray: Ray, depth: usize, obj: *Hittable) Vec3 {
+    if (depth == 0) return vec3s(0.0);
+    if (obj.hit(ray, Interval.new(0.001, inf))) |rec| {
+        if (rec.mat.weakRef().scatter(ray, rec)) |s| {
+            return s.attenuation * rayColor(s.ray, depth - 1, obj);
+        }
+        return vec3s(0.0);
     }
 
     const a = 0.5 * (normalize(ray.dir)[1] + 1.0);

@@ -1,9 +1,36 @@
+const util = @import("util.zig");
+const rand = util.rand;
+const randRange = util.randRange;
 pub const Vec3 = @Vector(3, f64);
 
 vec: Vec3,
 
 pub fn vec3s(val: f64) Vec3 {
     return @splat(val);
+}
+
+pub fn random() Vec3 {
+    return Vec3{ rand(), rand(), rand() };
+}
+
+pub fn randomRange(min: f64, max: f64) Vec3 {
+    return Vec3{randRange(min, max), randRange(min, max), randRange(min, max)};
+}
+
+pub inline fn randomInUnitSphere() Vec3 {
+    while (true) {
+        const p = randomRange(-1.0, 1.0);
+        if (length(p) < 1.0) return p;
+    }
+}
+
+pub inline fn randomUnitVec() Vec3 {
+    return normalize(randomInUnitSphere());
+}
+
+pub inline fn randomOnHemisphere(normal: Vec3) Vec3 {
+    const on_unit_sphere = randomUnitVec();
+    return if (dot(on_unit_sphere, normal) > 0.0) on_unit_sphere else -on_unit_sphere;
 }
 
 const Vec3Component = enum { x, y, z };
@@ -46,4 +73,8 @@ pub inline fn cross(u: Vec3, v: Vec3) Vec3 {
 
 pub inline fn normalize(v: Vec3) Vec3 {
     return v / vec3s(length(v));
+}
+
+pub inline fn reflect(v: Vec3, n: Vec3) Vec3 {
+    return v - vec3s(2.0 * dot(v, n)) * n;
 }

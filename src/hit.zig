@@ -9,16 +9,18 @@ const interface = @import("interface");
 const SelfType = interface.SelfType;
 const Interface = interface.Interface;
 const Interval = @import("interval.zig");
+const Material = @import("material.zig").Material;
 
 pub const HitRecord = struct {
     p: Vec3,
     normal: Vec3 = undefined,
+    mat: Rc(Material),
     t: f64,
     front: bool = undefined,
 
     /// Sets the hit record normal vector
     /// `outward_normal` is expected to have unit length (be normalized)
-    pub fn setFaceNormal(self: *HitRecord, ray: *const Ray, outward_normal: Vec3) void {
+    pub fn setFaceNormal(self: *HitRecord, ray: Ray, outward_normal: Vec3) void {
         self.front = vec3.dot(ray.dir, outward_normal) < 0.0;
         self.normal = if (self.front) outward_normal else -outward_normal;
     }
@@ -26,7 +28,7 @@ pub const HitRecord = struct {
 
 pub const Hittable = struct {
     const IFace = Interface(struct {
-        hit: *const fn (*SelfType, ray: *const Ray, ray_t: Interval) ?HitRecord,
+        hit: *const fn (*SelfType, Ray, Interval) ?HitRecord,
     }, interface.Storage.Owning);
 
     iface: IFace,
@@ -37,7 +39,7 @@ pub const Hittable = struct {
         };
     }
 
-    pub fn hit(self: *const Hittable, ray: *const Ray, ray_t: Interval) ?HitRecord {
+    pub fn hit(self: *const Hittable, ray: Ray, ray_t: Interval) ?HitRecord {
         return self.iface.call("hit", .{ ray, ray_t });
     }
 
@@ -58,7 +60,7 @@ pub const HittableList = struct {
         };
     }
 
-    pub fn hit(self: *const Self, ray: *const Ray, ray_t: Interval) ?HitRecord {
+    pub fn hit(self: *const Self, ray: Ray, ray_t: Interval) ?HitRecord {
         var hit_record: ?HitRecord = null;
         var closest = ray_t.max;
 

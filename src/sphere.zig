@@ -6,9 +6,12 @@ const hittable = @import("hit.zig");
 const Hittable = hittable.Hittable;
 const HitRecord = hittable.HitRecord;
 const Interval = @import("interval.zig");
+const Material = @import("material.zig").Material;
+const Rc = @import("rc.zig").RefCounted;
 
 center: Vec3,
 radius: f64,
+mat: Rc(Material),
 
 const Self = @This();
 
@@ -19,7 +22,7 @@ pub fn new(center: Vec3, radius: f64) Self {
     };
 }
 
-pub fn hit(self: *const Self, ray: *const Ray, ray_t: Interval) ?HitRecord {
+pub fn hit(self: *Self, ray: Ray, ray_t: Interval) ?HitRecord {
     const oc = self.center - ray.origin;
     const a = vec3.lengthSquared(ray.dir);
     const h = vec3.dot(ray.dir, oc);
@@ -37,6 +40,7 @@ pub fn hit(self: *const Self, ray: *const Ray, ray_t: Interval) ?HitRecord {
     var rec = HitRecord{
         .t = root,
         .p = ray.at(root),
+        .mat = self.mat.strongRef(),
     };
     const outward_normal = (rec.p - self.center) / vec3.vec3s(self.radius);
     rec.setFaceNormal(ray, outward_normal);

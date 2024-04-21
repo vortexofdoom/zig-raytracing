@@ -28,24 +28,22 @@ pub fn RefCounted(comptime T: type) type {
             };
         }
 
-        pub fn deinit(self: *Self) void {
+        pub fn deinit(self: *const Self) void {
             self.tagged_data_ptr.ref_count_ptr -= 1;
             if (self.tagged_data_ptr.ref_count_ptr == 0) {
                 const allocator = self.tagged_data_ptr.allocator;
-                const ref_count_ptr = self.tagged_data_ptr.ref_count_ptr;
-                allocator.free(self.tagged_data_ptr);
-                allocator.free(ref_count_ptr);
+                allocator.destroy(self.tagged_data_ptr);
             }
         }
 
-        pub fn strongRef(self: *Self) Self {
+        pub fn strongRef(self: *const Self) Self {
             self.tagged_data_ptr.ref_count_ptr += 1;
             return Self{
                 .tagged_data_ptr = self.tagged_data_ptr,
             };
         }
 
-        pub fn weakRef(self: *Self) *T {
+        pub fn weakRef(self: *const Self) *T {
             return &self.tagged_data_ptr.data;
         }
     };
