@@ -1,6 +1,6 @@
 const mem = @import("std").mem;
 
-// TODO: This should be an interface so it can be usable with other interfaces. As is, can't be used without huge hassle
+// TODO: This could be an interface so it can be more easily usable with other interfaces.
 pub fn RefCounted(comptime T: type) type {
     return struct {
         const Self = @This();

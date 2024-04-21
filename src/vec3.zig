@@ -85,3 +85,10 @@ pub inline fn refract(uv: Vec3, n: Vec3, etai_over_etat: f64) Vec3 {
     const out_para = vec3s(-@sqrt(@abs(1.0 - lengthSquared(out_perp)))) * n;
     return out_perp + out_para;
 }
+
+pub inline fn randomInUnitDisc() Vec3 {
+    while (true) {
+        const p = Vec3{randRange(-1.0, 1.0), randRange(-1.0, 1.0), 0.0};
+        if (lengthSquared(p) < 1.0) return p;
+    }
+}

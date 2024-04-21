@@ -37,6 +37,14 @@ look_from: Vec3,
 look_at: Vec3,
 /// Camera-relative up
 vup: Vec3,
+/// Variation angle of rays through each pixel
+defocus_angle: f64 = 0.0,
+/// Distance from `look_from` to plane of perfect focus
+focus_dist: f64 = 10.0,
+/// Defocus disc horizontal radius
+defocus_disc_u: Vec3 = undefined,
+/// Defocus disc vertical radius
+defocus_disc_v: Vec3 = undefined,
 
 const Self = @This();
 
@@ -79,11 +87,18 @@ fn getRay(self: *const Self, i: usize, j: usize) Ray {
     const pixel_sample = self.pixel00_loc
         + vec3.swizzle(offset, .x, .x, .x) * self.pixel_delta_u
         + vec3.swizzle(offset, .y, .y, .y) * self.pixel_delta_v;
-
+    const origin = if (self.defocus_angle <= 0) self.center else self.defocusDiscSample();
     return Ray{
-        .origin = self.center,
-        .dir = pixel_sample - self.center,
+        .origin = origin,
+        .dir = pixel_sample - origin,
     };
+}
+
+fn defocusDiscSample(self: *const Self) Vec3 {
+    const p = vec3.randomInUnitDisc();
+    return self.center 
+        + (vec3.swizzle(p, .x, .x, .x) * self.defocus_disc_u) 
+        + (vec3.swizzle(p, .y, .y, .y) * self.defocus_disc_v);
 }
 
 pub fn rayColor(ray: Ray, depth: usize, obj: *Hittable) Vec3 {
@@ -109,10 +124,9 @@ pub fn init(self: *Self) void {
 
     self.center = self.look_from;
 
-    const focal_length = vec3.length(self.look_from - self.look_at);
     const theta = std.math.degreesToRadians(self.vfov);
     const h = @tan(theta / 2);
-    const viewport_height = 2.0 * h * focal_length;
+    const viewport_height = 2.0 * h * self.focus_dist;
     const viewport_width = viewport_height * (img_width_f / img_height_f);
 
     const w = normalize(self.look_from - self.look_at);
@@ -129,8 +143,12 @@ pub fn init(self: *Self) void {
 
     // Calculate position of upper left pixel
     const viewport_upper_left = self.center 
-        - (vec3s(focal_length) * w) 
+        - (vec3s(self.focus_dist) * w) 
         - (viewport_u / vec3s(2.0)) 
         - (viewport_v / vec3s(2.0));
     self.pixel00_loc = viewport_upper_left + vec3s(0.5) * (self.pixel_delta_u + self.pixel_delta_v);
+
+    const defocus_radius = self.focus_dist * @tan(std.math.degreesToRadians(self.defocus_angle / 2.0));
+    self.defocus_disc_u = u * vec3s(defocus_radius);
+    self.defocus_disc_v = v * vec3s(defocus_radius);
 }

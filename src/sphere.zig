@@ -22,6 +22,10 @@ pub fn new(center: Vec3, radius: f64) Self {
     };
 }
 
+pub fn deinit(self: *Self) void {
+    self.mat.deinit();
+}
+
 pub fn hit(self: *Self, ray: Ray, ray_t: Interval) ?HitRecord {
     const oc = self.center - ray.origin;
     const a = vec3.lengthSquared(ray.dir);

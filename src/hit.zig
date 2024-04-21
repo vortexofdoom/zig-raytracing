@@ -29,6 +29,7 @@ pub const HitRecord = struct {
 pub const Hittable = struct {
     const IFace = Interface(struct {
         hit: *const fn (*SelfType, Ray, Interval) ?HitRecord,
+        deinit: *const fn (*SelfType) void,
     }, interface.Storage.Owning);
 
     iface: IFace,
@@ -44,6 +45,7 @@ pub const Hittable = struct {
     }
 
     pub fn deinit(self: *const Hittable) void {
+        self.iface.call("deinit", .{});
         self.iface.deinit();
     }
 };

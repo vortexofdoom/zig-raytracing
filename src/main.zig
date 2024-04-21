@@ -16,6 +16,8 @@ const Material = material.Material;
 const Lambertian = material.Lambertian;
 const Metal = material.Metal;
 const Dielectric = material.Dielectric;
+const util = @import("util.zig");
+const rand = util.rand;
 
 const inf = std.math.inf(f64);
 const pi = std.math.pi;
@@ -33,64 +35,81 @@ pub fn main() !void {
     var bw = std.io.bufferedWriter(stdout_file);
     const stdout = bw.writer();
 
-    const mat_ground = try Material.init(Lambertian{ .albedo = Vec3{0.8, 0.8, 0.0}}, gpa);
-const mat_center = try Material.init(Lambertian{ .albedo = Vec3{0.1, 0.2, 0.5}}, gpa);
-    const mat_left = try Material.init(
-        Dielectric{.refraction_idx = 1.50},
-        gpa
-    );
-    const mat_bubble = try Material.init(
-        Dielectric{.refraction_idx = 1.00 / 1.50},
-        gpa
-    );
-    const mat_right = try Material.init(
-        Metal{ 
-            .albedo = Vec3{0.8, 0.6, 0.2},
-            .fuzz = 1.0,
-        },
-        gpa
-    );
 
     // World
     var world = HittableList.init(gpa);
+
+    const mat1 = try Material.init(Dielectric{.refraction_idx = 1.50}, gpa);
     try world.add(Sphere{
-        .center = Vec3{ 0.0, 0.0, -1.2 },
-        .radius = 0.5,
-        .mat = mat_center,
+        .center = Vec3{0.0, 1.0, 0.0},
+        .radius = 1.0,
+        .mat = mat1,
     });
+    const mat2 = try Material.init(Lambertian{ .albedo = Vec3{0.4, 0.2, 0.1}}, gpa);
     try world.add(Sphere{
-        .center = Vec3{ -1.0, 0.0, -1.0 },
-        .radius = 0.5,
-        .mat = mat_left,
+        .center = Vec3{-4.0, 1.0, 0.0},
+        .radius = 1.0,
+        .mat = mat2,
     });
+    const mat3 = try Material.init(
+        Metal{ 
+            .albedo = Vec3{0.7, 0.6, 0.5},
+            .fuzz = 0.0,
+        },
+        gpa
+    );
     try world.add(Sphere{
-        .center = Vec3{ -1.0, 0.0, -1.0 },
-        .radius = 0.4,
-        .mat = mat_bubble,
+        .center = Vec3{4.0, 1.0, 0.0},
+        .radius = 1.0,
+        .mat = mat3,
     });
+    const mat_ground = try Material.init(Lambertian{ .albedo = Vec3{0.5, 0.5, 0.5}}, gpa);
     try world.add(Sphere{
-        .center = Vec3{ 1.0, 0.0, -1.0 },
-        .radius = 0.5,
-        .mat = mat_right,
-    });
-try world.add(Sphere{
         .center = Vec3{ 0.0, -100.5, -1 },
         .radius = 100.0,
         .mat = mat_ground,
     });
+
+    var a: f64 = -11.0;
+    while (a < 11.0) : (a += 1.0) {
+        var b: f64 = -11.0;
+        while (b < 11.0) : (b += 1.0) {
+            const choose_mat = rand();
+            const center = Vec3{ a + 0.9 * rand(), 0.2, b + 0.9 * rand()};
+            if (vec3.length(center - Vec3{4.0, 0.2, 0.0}) > 0.9) {
+                const mat = if (choose_mat < 0.8) try Material.init(
+                    Lambertian{ .albedo = vec3.random() * vec3.random()}, gpa)
+                else if (choose_mat < 0.95) try Material.init(
+                    Metal{
+                        .albedo = vec3.randomRange(0.5, 1.0), 
+                        .fuzz = util.randRange(0.0, 0.5),
+                    },
+                    gpa,
+                ) else try Material.init(Dielectric{ .refraction_idx = 1.5 }, gpa);
+                try world.add(Sphere{
+                    .center = center,
+                    .radius = 0.2,
+                    .mat = mat,
+                });
+            }
+        }
+    }
+    
     var hittable = try Hittable.init(world, gpa);
     defer hittable.deinit();
 
     // Camera
     var camera = Camera{
         .aspect_ratio = 16.0 / 9.0,
-        .img_width = 400,
-        .samples_per_pixel = 100,
+        .img_width = 1200,
+        .samples_per_pixel = 500,
         .max_depth = 50.0,
         .vfov = 20.0,
-        .look_from = Vec3{-2.0, 2.0, 1.0},
-        .look_at = Vec3{0.0, 0.0, -1.0},
+        .look_from = Vec3{13.0, 12.0, 3.0},
+        .look_at = Vec3{0.0, 0.0, 0.0},
         .vup = Vec3{0.0, 1.0, 0.0},
+        .defocus_angle = 0.6,
+        .focus_dist = 10.0,
     };
 
     try camera.render(&hittable, stdout);
