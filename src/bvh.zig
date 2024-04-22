@@ -16,7 +16,7 @@ bbox: Aabb = Aabb{},
 const Self = @This();
 
 fn lt(axis: usize, a: Rc(Hittable), b: Rc(Hittable)) bool {
-    return a.weakRef().boundingBox().min[axis] < b.weakRef().boundingBox().min[axis];
+    return (a.weakRef().boundingBox().min < b.weakRef().boundingBox().min)[axis];
 }
 
 pub fn new(list: HittableList) !Self {
