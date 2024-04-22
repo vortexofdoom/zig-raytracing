@@ -24,8 +24,9 @@ pub fn new(list: HittableList) !Self {
 }
 
 pub fn init(objects: []Rc(Hittable), allocator: std.mem.Allocator) !Self {
-    const axis = @import("util.zig").rand.random().uintLessThan(usize, 3);
     var self = Self{};
+    for (objects) |obj| self.bbox = self.bbox.combined(obj.weakRef().boundingBox());
+    const axis = self.bbox.longestAxis();
     if (objects.len == 1) {
         self.left = objects[0].strongRef();
         self.right = objects[0].strongRef();

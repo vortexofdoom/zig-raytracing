@@ -7,14 +7,27 @@ const vec3s = vec3.vec3s;
 
 const Self = @This();
 
-max: Vec3 = vec3s(inf),
-min: Vec3 = vec3s(-inf),
+pub const UNIVERSE = Self{
+    .max = vec3s(inf),
+    .min = vec3s(-inf),
+};
+
+pub const EMPTY = Self{};
+
+max: Vec3 = vec3s(-inf),
+min: Vec3 = vec3s(inf),
 
 pub fn new(a: Vec3, b: Vec3) Self {
     return Self {
         .max = @max(a, b),
         .min = @min(a, b),
     };
+}
+
+pub fn longestAxis(self: *Self) usize {
+    const diff = self.max - self.min;
+    const a = @intFromBool(diff[1] > diff[0]);
+    return if (diff[a] > diff[2]) a else 2;
 }
 
 pub fn combined(a: Self, b: Self) Self {
