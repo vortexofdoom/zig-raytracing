@@ -17,7 +17,8 @@ const Lambertian = material.Lambertian;
 const Metal = material.Metal;
 const Dielectric = material.Dielectric;
 const util = @import("util.zig");
-const rand = util.rand;
+const rand = util.random;
+const Bvh = @import("bvh.zig");
 
 const inf = std.math.inf(f64);
 const pi = std.math.pi;
@@ -38,19 +39,10 @@ pub fn main() !void {
 
     // World
     var world = HittableList.init(gpa);
-
     const mat1 = try Material.init(Dielectric{.refraction_idx = 1.50}, gpa);
-    try world.add(Sphere{
-        .center = Vec3{0.0, 1.0, 0.0},
-        .radius = 1.0,
-        .mat = mat1,
-    });
+    try world.add(Sphere.new(Vec3{0.0, 1.0, 0.0}, null, 1.0, mat1));
     const mat2 = try Material.init(Lambertian{ .albedo = Vec3{0.4, 0.2, 0.1}}, gpa);
-    try world.add(Sphere{
-        .center = Vec3{-4.0, 1.0, 0.0},
-        .radius = 1.0,
-        .mat = mat2,
-    });
+    try world.add(Sphere.new(Vec3{-4.0, 1.0, 0.0}, null, 1.0, mat2));
     const mat3 = try Material.init(
         Metal{ 
             .albedo = Vec3{0.7, 0.6, 0.5},
@@ -58,17 +50,9 @@ pub fn main() !void {
         },
         gpa
     );
-    try world.add(Sphere{
-        .center = Vec3{4.0, 1.0, 0.0},
-        .radius = 1.0,
-        .mat = mat3,
-    });
+    try world.add(Sphere.new(Vec3{4.0, 1.0, 0.0}, null, 1.0, mat3));
     const mat_ground = try Material.init(Lambertian{ .albedo = Vec3{0.5, 0.5, 0.5}}, gpa);
-    try world.add(Sphere{
-        .center = Vec3{ 0.0, -1000.0, -1.0 },
-        .radius = 1000.0,
-        .mat = mat_ground,
-    });
+    try world.add(Sphere.new(Vec3{ 0.0, -1000.0, -1.0 }, null, 1000.0, mat_ground));
 
     var a: f64 = -11.0;
     while (a < 11.0) : (a += 1.0) {
@@ -86,18 +70,19 @@ pub fn main() !void {
                     },
                     gpa,
                 ) else try Material.init(Dielectric{ .refraction_idx = 1.5 }, gpa);
-                try world.add(Sphere{
-                    .center = center,
-                    .center_mov = Vec3{0.0, util.randRange(0.0, 0.5), 0.0},
-                    .radius = 0.2,
-                    .mat = mat,
-                });
+                try world.add(Sphere.new(
+                    center,
+                    Vec3{0.0, util.randRange(0.0, 0.5), 0.0},
+                    0.2,
+                    mat,
+                ));
             }
         }
     }
-    
-    var hittable = try Hittable.init(world, gpa);
+
+    const hittable = try Hittable.init(try Bvh.new(world), gpa);
     defer hittable.deinit();
+    //const hittable = try Hittable.init(world, gpa);
 
     // Camera
     var camera = Camera{
@@ -113,7 +98,7 @@ pub fn main() !void {
         .focus_dist = 10.0,
     };
 
-    try camera.render(&hittable, stdout);
+    try camera.render(hittable, stdout);
 
     try bw.flush(); // don't forget to flush!
 }
@@ -131,17 +116,9 @@ test "test_deinit" {
     var world = HittableList.init(ta);
 
     const mat1 = try Material.init(Dielectric{.refraction_idx = 1.50}, ta);
-    try world.add(Sphere{
-        .center = Vec3{0.0, 1.0, 0.0},
-        .radius = 1.0,
-        .mat = mat1,
-    });
+    try world.add(Sphere.new(Vec3{0.0, 1.0, 0.0}, null, 1.0, mat1));
     const mat2 = try Material.init(Lambertian{ .albedo = Vec3{0.4, 0.2, 0.1}}, ta);
-    try world.add(Sphere{
-        .center = Vec3{-4.0, 1.0, 0.0},
-        .radius = 1.0,
-        .mat = mat2,
-    });
+    try world.add(Sphere.new(Vec3{-4.0, 1.0, 0.0}, null, 1.0, mat2));
     const mat3 = try Material.init(
         Metal{ 
             .albedo = Vec3{0.7, 0.6, 0.5},
@@ -149,46 +126,38 @@ test "test_deinit" {
         },
         ta
     );
-    try world.add(Sphere{
-        .center = Vec3{4.0, 1.0, 0.0},
-        .radius = 1.0,
-        .mat = mat3,
-    });
+    try world.add(Sphere.new(Vec3{4.0, 1.0, 0.0}, null, 1.0, mat3));
     const mat_ground = try Material.init(Lambertian{ .albedo = Vec3{0.5, 0.5, 0.5}}, ta);
-    try world.add(Sphere{
-        .center = Vec3{ 0.0, -1000.0, -1.0 },
-        .radius = 1000.0,
-        .mat = mat_ground,
-    });
+    try world.add(Sphere.new(Vec3{ 0.0, -1000.0, -1.0 }, null, 1000.0, mat_ground));
 
-    // var a: f64 = -4.0;
-    // while (a < 4.0) : (a += 1.0) {
-    //     var b: f64 = -4.0;
-    //     while (b < 4.0) : (b += 1.0) {
-    //         const choose_mat = rand();
-    //         const center = Vec3{ a + 0.9 * rand(), 0.2, b + 0.9 * rand()};
-    //         if (vec3.length(center - Vec3{4.0, 0.2, 0.0}) > 0.9) {
-    //             const mat = if (choose_mat < 0.8) try Material.init(
-    //                 Lambertian{ .albedo = vec3.random() * vec3.random()}, ta)
-    //             else if (choose_mat < 0.95) try Material.init(
-    //                 Metal{
-    //                     .albedo = vec3.randomRange(0.5, 1.0), 
-    //                     .fuzz = util.randRange(0.0, 0.5),
-    //                 },
-    //                 ta,
-    //             ) else try Material.init(Dielectric{ .refraction_idx = 1.5 }, ta);
-    //             try world.add(Sphere{
-    //                 .center = center,
-    //                 .center_mov = center + Vec3{0.0, util.randRange(0.0, 0.5), 0.0},
-    //                 .radius = 0.2,
-    //                 .mat = mat,
-    //             });
-    //         }
-    //     }
-    // }
+    var a: f64 = -4.0;
+    while (a < 4.0) : (a += 1.0) {
+        var b: f64 = -4.0;
+        while (b < 4.0) : (b += 1.0) {
+            const choose_mat = rand();
+            const center = Vec3{ a + 0.9 * rand(), 0.2, b + 0.9 * rand()};
+            if (vec3.length(center - Vec3{4.0, 0.2, 0.0}) > 0.9) {
+                const mat = if (choose_mat < 0.8) try Material.init(
+                    Lambertian{ .albedo = vec3.random() * vec3.random()}, ta)
+                else if (choose_mat < 0.95) try Material.init(
+                    Metal{
+                        .albedo = vec3.randomRange(0.5, 1.0), 
+                        .fuzz = util.randRange(0.0, 0.5),
+                    },
+                    ta,
+                ) else try Material.init(Dielectric{ .refraction_idx = 1.5 }, ta);
+                try world.add(Sphere.new(
+                    center,
+                    Vec3{0.0, util.randRange(0.0, 0.5), 0.0},
+                    0.2,
+                    mat,
+                ));
+            }
+        }
+    }
     
-    var hittable = try Hittable.init(world, ta);
-    defer hittable.deinit();
+    const hittable = try Hittable.init(world, ta);
+    defer Hittable.deinit(hittable);
 
     // Camera
     var camera = Camera{
@@ -204,7 +173,7 @@ test "test_deinit" {
         .focus_dist = 10.0,
     };
 
-    try camera.render(&hittable, Writer{});
+    try camera.render(hittable, Writer{});
     try std.testing.expectEqual(1, mat1.tagged_data_ptr.ref_count);
     try std.testing.expectEqual(1, mat2.tagged_data_ptr.ref_count);
     try std.testing.expectEqual(1, mat3.tagged_data_ptr.ref_count);

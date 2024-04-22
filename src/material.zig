@@ -7,7 +7,7 @@ const vec3 = @import("vec3.zig");
 const Vec3 = vec3.Vec3;
 const Ray = @import("ray.zig");
 const Rc = @import("rc.zig").RefCounted;
-const rand = @import("util.zig").rand;
+const rand = @import("util.zig").random;
 
 pub const Scatter = struct {
     attenuation: Vec3,
@@ -23,14 +23,13 @@ pub const Material = struct {
 
     pub fn init(obj: anytype, allocator: @import("std").mem.Allocator) !Rc(Material) {
         const rc = try Rc(Material).init(allocator);
-        rc.tagged_data_ptr.data = Material{
+        rc.weakRef().* = Material{
             .iface = try IFace.init(obj, allocator),
         };
         return rc;
     }
 
     pub fn scatter(self: *const Material, ray: Ray, rec: HitRecord) ?Scatter {
-        defer Material.deinit(rec.mat);
         return self.iface.call("scatter", .{ ray, rec });
     }
 
@@ -48,7 +47,7 @@ pub const Lambertian = struct {
         // Catch degenerate scatter direction
         if (@reduce(.And, @abs(scatter_dir) < vec3.vec3s(1e-8))) scatter_dir = rec.normal;
 
-        return Scatter {
+        return Scatter{
             .attenuation = self.albedo,
             .ray = Ray{
                 .origin = rec.p,
@@ -66,8 +65,8 @@ pub const Metal = struct {
     pub fn scatter(self: *const Metal, in: Ray, rec: HitRecord) ?Scatter {
         var reflected = vec3.reflect(in.dir, rec.normal);
         reflected = vec3.normalize(reflected) + vec3.vec3s(self.fuzz) * vec3.randomUnitVec();
-        const out = Ray{.origin = rec.p, .dir = reflected};
-        return if (vec3.dot(out.dir, reflected) > 0.0) Scatter {
+        const out = Ray{ .origin = rec.p, .dir = reflected };
+        return if (vec3.dot(out.dir, reflected) > 0.0) Scatter{
             .attenuation = self.albedo,
             .ray = Ray{
                 .origin = rec.p,
@@ -88,16 +87,12 @@ pub const Dielectric = struct {
         const sin_theta = @sqrt(1.0 - cos_theta * cos_theta);
         const cant_refract = ri * sin_theta > 1.0;
         const dir = if (cant_refract or reflectance(cos_theta, ri) > rand())
-            vec3.reflect(unit_dir, rec.normal) 
-        else 
+            vec3.reflect(unit_dir, rec.normal)
+        else
             vec3.refract(unit_dir, rec.normal, ri);
         return Scatter{
             .attenuation = vec3.vec3s(1.0),
-            .ray = Ray{
-                .origin = rec.p,
-                .dir = dir,
-                .time = in.time
-            },
+            .ray = Ray{ .origin = rec.p, .dir = dir, .time = in.time },
         };
     }
 

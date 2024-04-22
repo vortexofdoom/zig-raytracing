@@ -9,7 +9,8 @@ const white = vec3s(1.0);
 const Interval = @import("interval.zig");
 const util = @import("util.zig");
 const inf = util.inf;
-const rand = util.rand;
+const rand = util.random;
+const Rc = @import("rc.zig").RefCounted;
 
 /// Ratio of image width to height
 aspect_ratio: f64 = 1.0,
@@ -55,7 +56,7 @@ fn writeColor(color: Vec3, writer: anytype) !void {
     try writer.print("{d} {d} {d}\n", .{ byte_colors[0], byte_colors[1], byte_colors[2] });
 }
 
-pub fn render(self: *Self, obj: *Hittable, writer: anytype) !void {
+pub fn render(self: *Self, obj: Rc(Hittable), writer: anytype) !void {
     self.init();
 
     try writer.print("P3\n{d} {d}\n255\n", .{ self.img_width, self.img_height });
@@ -66,7 +67,7 @@ pub fn render(self: *Self, obj: *Hittable, writer: anytype) !void {
             var pixel_color = vec3s(0.0);
             for (0..self.samples_per_pixel) |_| {
                 const ray = self.getRay(i, j);
-                pixel_color += rayColor(ray, self.max_depth, obj);
+                pixel_color += rayColor(ray, self.max_depth, obj.weakRef());
             }
             try writeColor(pixel_color * vec3s(self.pixel_samples_scale), writer);
         }
@@ -75,7 +76,7 @@ pub fn render(self: *Self, obj: *Hittable, writer: anytype) !void {
 }
 
 fn sampleSquare() Vec3 {
-    return Vec3{rand() - 0.5, rand() - 0.5, 0.0};
+    return Vec3{ rand() - 0.5, rand() - 0.5, 0.0 };
 }
 
 inline fn linearToGamma(linear: f64) f64 {
@@ -84,9 +85,7 @@ inline fn linearToGamma(linear: f64) f64 {
 
 fn getRay(self: *const Self, i: usize, j: usize) Ray {
     const offset = Vec3{ @floatFromInt(i), @floatFromInt(j), 0.0 } + sampleSquare();
-    const pixel_sample = self.pixel00_loc
-        + vec3.swizzle(offset, .x, .x, .x) * self.pixel_delta_u
-        + vec3.swizzle(offset, .y, .y, .y) * self.pixel_delta_v;
+    const pixel_sample = self.pixel00_loc + vec3.swizzle(offset, .x, .x, .x) * self.pixel_delta_u + vec3.swizzle(offset, .y, .y, .y) * self.pixel_delta_v;
     const origin = if (self.defocus_angle <= 0) self.center else self.defocusDiscSample();
     return Ray{
         .origin = origin,
@@ -97,15 +96,13 @@ fn getRay(self: *const Self, i: usize, j: usize) Ray {
 
 fn defocusDiscSample(self: *const Self) Vec3 {
     const p = vec3.randomInUnitDisc();
-    return self.center 
-        + (vec3.swizzle(p, .x, .x, .x) * self.defocus_disc_u) 
-        + (vec3.swizzle(p, .y, .y, .y) * self.defocus_disc_v);
+    return self.center + (vec3.swizzle(p, .x, .x, .x) * self.defocus_disc_u) + (vec3.swizzle(p, .y, .y, .y) * self.defocus_disc_v);
 }
 
 pub fn rayColor(ray: Ray, depth: usize, obj: *Hittable) Vec3 {
     if (depth == 0) return vec3s(0.0);
     if (obj.hit(ray, Interval.new(0.001, inf))) |rec| {
-        if (rec.mat.weakRef().scatter(ray, rec)) |s| {
+        if (rec.mat.scatter(ray, rec)) |s| {
             return s.attenuation * rayColor(s.ray, depth - 1, obj);
         }
         return vec3s(0.0);
@@ -143,10 +140,7 @@ pub fn init(self: *Self) void {
     self.pixel_delta_v = viewport_v / vec3s(img_height_f);
 
     // Calculate position of upper left pixel
-    const viewport_upper_left = self.center 
-        - (vec3s(self.focus_dist) * w) 
-        - (viewport_u / vec3s(2.0)) 
-        - (viewport_v / vec3s(2.0));
+    const viewport_upper_left = self.center - (vec3s(self.focus_dist) * w) - (viewport_u / vec3s(2.0)) - (viewport_v / vec3s(2.0));
     self.pixel00_loc = viewport_upper_left + vec3s(0.5) * (self.pixel_delta_u + self.pixel_delta_v);
 
     const defocus_radius = self.focus_dist * @tan(std.math.degreesToRadians(self.defocus_angle / 2.0));

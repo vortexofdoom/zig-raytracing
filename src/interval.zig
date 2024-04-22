@@ -15,6 +15,14 @@ pub fn new(min: f64, max: f64) Self {
     };
 }
 
+pub fn expand(self: *const Self, delta: f64) Self {
+    const padding = delta / 2.0;
+    return Self{
+        .min = self.min - padding,
+        .max = self.max + padding,
+    };
+}
+
 pub fn clamp(self: *const Self, x: f64) f64 {
     if (x < self.min) return self.min;
     if (x > self.max) return self.max;

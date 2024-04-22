@@ -1,5 +1,5 @@
 const util = @import("util.zig");
-const rand = util.rand;
+const rand = util.random;
 const randRange = util.randRange;
 pub const Vec3 = @Vector(3, f64);
 
@@ -14,7 +14,7 @@ pub fn random() Vec3 {
 }
 
 pub fn randomRange(min: f64, max: f64) Vec3 {
-    return Vec3{randRange(min, max), randRange(min, max), randRange(min, max)};
+    return Vec3{ randRange(min, max), randRange(min, max), randRange(min, max) };
 }
 
 pub inline fn randomInUnitSphere() Vec3 {
@@ -88,7 +88,7 @@ pub inline fn refract(uv: Vec3, n: Vec3, etai_over_etat: f64) Vec3 {
 
 pub inline fn randomInUnitDisc() Vec3 {
     while (true) {
-        const p = Vec3{randRange(-1.0, 1.0), randRange(-1.0, 1.0), 0.0};
+        const p = Vec3{ randRange(-1.0, 1.0), randRange(-1.0, 1.0), 0.0 };
         if (lengthSquared(p) < 1.0) return p;
     }
 }
