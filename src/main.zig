@@ -19,6 +19,10 @@ const Dielectric = material.Dielectric;
 const util = @import("util.zig");
 const rand = util.random;
 const Bvh = @import("bvh.zig");
+const texture = @import("texture.zig");
+const Texture = texture.Texture;
+const Solid = texture.Solid;
+const Checker = texture.Checker;
 
 const inf = std.math.inf(f64);
 const pi = std.math.pi;
@@ -41,7 +45,7 @@ pub fn main() !void {
     var world = HittableList.init(gpa);
     const mat1 = try Material.init(Dielectric{.refraction_idx = 1.50}, gpa);
     try world.add(Sphere.new(Vec3{0.0, 1.0, 0.0}, null, 1.0, mat1));
-    const mat2 = try Material.init(Lambertian{ .albedo = Vec3{0.4, 0.2, 0.1}}, gpa);
+    const mat2 = try Material.init(Lambertian{ .tex = try Texture.init(Solid{.albedo =  Vec3{0.4, 0.2, 0.1}}, gpa)}, gpa);
     try world.add(Sphere.new(Vec3{-4.0, 1.0, 0.0}, null, 1.0, mat2));
     const mat3 = try Material.init(
         Metal{ 
@@ -51,8 +55,9 @@ pub fn main() !void {
         gpa
     );
     try world.add(Sphere.new(Vec3{4.0, 1.0, 0.0}, null, 1.0, mat3));
-    const mat_ground = try Material.init(Lambertian{ .albedo = Vec3{0.5, 0.5, 0.5}}, gpa);
-    try world.add(Sphere.new(Vec3{ 0.0, -1000.0, -1.0 }, null, 1000.0, mat_ground));
+    //const mat_ground = try Material.init(Lambertian{ .albedo = Vec3{0.5, 0.5, 0.5}}, gpa);
+    const checker = try texture.Texture.init(try texture.Checker.initColor(0.32, Vec3{0.2, 0.3, 0.1}, Vec3{0.9, 0.9, 0.9}, gpa), gpa);
+    try world.add(Sphere.new(Vec3{ 0.0, -1000.0, -1.0 }, null, 1000.0, try Material.init(Lambertian { .tex = try Texture.init(checker, gpa) }, gpa)));
 
     var a: f64 = -11.0;
     while (a < 11.0) : (a += 1.0) {
@@ -62,7 +67,12 @@ pub fn main() !void {
             const center = Vec3{ a + 0.9 * rand(), 0.2, b + 0.9 * rand()};
             if (vec3.length(center - Vec3{4.0, 0.2, 0.0}) > 0.9) {
                 const mat = if (choose_mat < 0.8) try Material.init(
-                    Lambertian{ .albedo = vec3.random() * vec3.random()}, gpa)
+                    Lambertian{ 
+                        .tex = try Texture.init(Solid{ .albedo = vec3.random() * vec3.random()}, 
+                        gpa)
+                    },
+                    gpa,
+                )
                 else if (choose_mat < 0.95) try Material.init(
                     Metal{
                         .albedo = vec3.randomRange(0.5, 1.0), 
@@ -80,7 +90,7 @@ pub fn main() !void {
         }
     }
 
-    const hittable = try Hittable.init(try Bvh.new(world), gpa);
+    const hittable = try Hittable.init(try Bvh.new(&world), gpa);
     defer hittable.deinit();
     //const hittable = try Hittable.init(world, gpa);
 
@@ -111,13 +121,12 @@ test "test_deinit" {
         pub fn print(_: @This(), _: []const u8, _: anytype) !void {}
     };
 
-
     // World
     var world = HittableList.init(ta);
 
     const mat1 = try Material.init(Dielectric{.refraction_idx = 1.50}, ta);
     try world.add(Sphere.new(Vec3{0.0, 1.0, 0.0}, null, 1.0, mat1));
-    const mat2 = try Material.init(Lambertian{ .albedo = Vec3{0.4, 0.2, 0.1}}, ta);
+    const mat2 = try Material.init(Lambertian{ .tex = try Texture.init(Solid{.albedo =  Vec3{0.4, 0.2, 0.1}}, ta)}, ta);
     try world.add(Sphere.new(Vec3{-4.0, 1.0, 0.0}, null, 1.0, mat2));
     const mat3 = try Material.init(
         Metal{ 
@@ -127,8 +136,8 @@ test "test_deinit" {
         ta
     );
     try world.add(Sphere.new(Vec3{4.0, 1.0, 0.0}, null, 1.0, mat3));
-    const mat_ground = try Material.init(Lambertian{ .albedo = Vec3{0.5, 0.5, 0.5}}, ta);
-    try world.add(Sphere.new(Vec3{ 0.0, -1000.0, -1.0 }, null, 1000.0, mat_ground));
+    const checker = try texture.Texture.init(try texture.Checker.initColor(0.32, Vec3{0.2, 0.3, 0.1}, Vec3{0.9, 0.9, 0.9}, ta), ta);
+    try world.add(Sphere.new(Vec3{ 0.0, -1000.0, -1.0 }, null, 1000.0, try Material.init(Lambertian { .tex = try Texture.init(checker, ta) }, ta)));
 
     var a: f64 = -4.0;
     while (a < 4.0) : (a += 1.0) {
@@ -138,7 +147,12 @@ test "test_deinit" {
             const center = Vec3{ a + 0.9 * rand(), 0.2, b + 0.9 * rand()};
             if (vec3.length(center - Vec3{4.0, 0.2, 0.0}) > 0.9) {
                 const mat = if (choose_mat < 0.8) try Material.init(
-                    Lambertian{ .albedo = vec3.random() * vec3.random()}, ta)
+                    Lambertian{ 
+                        .tex = try Texture.init(Solid{ .albedo = vec3.random() * vec3.random()}, 
+                        ta)
+                    },
+                    ta,
+                )
                 else if (choose_mat < 0.95) try Material.init(
                     Metal{
                         .albedo = vec3.randomRange(0.5, 1.0), 
@@ -156,8 +170,8 @@ test "test_deinit" {
         }
     }
     
-    const hittable = try Hittable.init(world, ta);
-    defer Hittable.deinit(hittable);
+    const hittable = try Hittable.init(try Bvh.new(&world), gpa);
+    defer hittable.deinit();
 
     // Camera
     var camera = Camera{
@@ -174,8 +188,9 @@ test "test_deinit" {
     };
 
     try camera.render(hittable, Writer{});
-    try std.testing.expectEqual(1, mat1.tagged_data_ptr.ref_count);
-    try std.testing.expectEqual(1, mat2.tagged_data_ptr.ref_count);
-    try std.testing.expectEqual(1, mat3.tagged_data_ptr.ref_count);
-    try std.testing.expectEqual(1, mat_ground.tagged_data_ptr.ref_count);
+    try std.testing.expectEqual(1, mat1.ref_count.*);
+    try std.testing.expectEqual(1, mat2.ref_count.*);
+    try std.testing.expectEqual(1, mat3.ref_count.*);
+    try std.testing.expectEqual(1, checker.ref_count.*);
+    try std.testing.expectEqual(1, hittable.ref_count.*);
 }

@@ -56,7 +56,7 @@ fn writeColor(color: Vec3, writer: anytype) !void {
     try writer.print("{d} {d} {d}\n", .{ byte_colors[0], byte_colors[1], byte_colors[2] });
 }
 
-pub fn render(self: *Self, obj: Rc(Hittable), writer: anytype) !void {
+pub fn render(self: *Self, obj: Hittable, writer: anytype) !void {
     self.init();
 
     try writer.print("P3\n{d} {d}\n255\n", .{ self.img_width, self.img_height });
@@ -67,7 +67,7 @@ pub fn render(self: *Self, obj: Rc(Hittable), writer: anytype) !void {
             var pixel_color = vec3s(0.0);
             for (0..self.samples_per_pixel) |_| {
                 const ray = self.getRay(i, j);
-                pixel_color += rayColor(ray, self.max_depth, obj.weakRef());
+                pixel_color += rayColor(ray, self.max_depth, obj);
             }
             try writeColor(pixel_color * vec3s(self.pixel_samples_scale), writer);
         }
@@ -85,7 +85,9 @@ inline fn linearToGamma(linear: f64) f64 {
 
 fn getRay(self: *const Self, i: usize, j: usize) Ray {
     const offset = Vec3{ @floatFromInt(i), @floatFromInt(j), 0.0 } + sampleSquare();
-    const pixel_sample = self.pixel00_loc + vec3.swizzle(offset, .x, .x, .x) * self.pixel_delta_u + vec3.swizzle(offset, .y, .y, .y) * self.pixel_delta_v;
+    const pixel_sample = self.pixel00_loc 
+        + vec3.swizzle(offset, .x, .x, .x) * self.pixel_delta_u
+        + vec3.swizzle(offset, .y, .y, .y) * self.pixel_delta_v;
     const origin = if (self.defocus_angle <= 0) self.center else self.defocusDiscSample();
     return Ray{
         .origin = origin,
@@ -96,10 +98,12 @@ fn getRay(self: *const Self, i: usize, j: usize) Ray {
 
 fn defocusDiscSample(self: *const Self) Vec3 {
     const p = vec3.randomInUnitDisc();
-    return self.center + (vec3.swizzle(p, .x, .x, .x) * self.defocus_disc_u) + (vec3.swizzle(p, .y, .y, .y) * self.defocus_disc_v);
+    return self.center 
+    + (vec3.swizzle(p, .x, .x, .x) * self.defocus_disc_u) 
+    + (vec3.swizzle(p, .y, .y, .y) * self.defocus_disc_v);
 }
 
-pub fn rayColor(ray: Ray, depth: usize, obj: *Hittable) Vec3 {
+pub fn rayColor(ray: Ray, depth: usize, obj: Hittable) Vec3 {
     if (depth == 0) return vec3s(0.0);
     if (obj.hit(ray, Interval.new(0.001, inf))) |rec| {
         if (rec.mat.scatter(ray, rec)) |s| {

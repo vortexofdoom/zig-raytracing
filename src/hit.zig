@@ -15,9 +15,11 @@ const Aabb = @import("aabb.zig");
 pub const HitRecord = struct {
     p: Vec3,
     normal: Vec3 = undefined,
-    mat: *Material,
+    mat: Material,
     t: f64,
     front: bool = undefined,
+    u: f64 = 0.0,
+    v: f64 = 0.0,
 
     /// Sets the hit record normal vector
     /// `outward_normal` is expected to have unit length (be normalized)
@@ -35,13 +37,26 @@ pub const Hittable = struct {
     }, interface.Storage.Owning);
 
     iface: IFace,
+    ref_count: *usize,
+    allocator: std.mem.Allocator,
 
-    pub fn init(obj: anytype, allocator: std.mem.Allocator) !Rc(Hittable) {
-        const rc = try Rc(Hittable).init(allocator);
-        rc.weakRef().* = Hittable{
+    pub fn init(obj: anytype, allocator: std.mem.Allocator) !Hittable {
+        const rc = try allocator.create(usize);
+        rc.* = 1;
+        return Hittable{
             .iface = try IFace.init(obj, allocator),
+            .ref_count = rc,
+            .allocator = allocator,
         };
-        return rc;
+    }
+
+    pub fn strongRef(self: *const Hittable) Hittable {
+        self.ref_count.* += 1;
+        return Hittable{
+            .iface = self.iface,
+            .ref_count = self.ref_count,
+            .allocator = self.allocator,
+        };
     }
 
     pub fn hit(self: *const Hittable, ray: Ray, ray_t: Interval) ?HitRecord {
@@ -52,19 +67,18 @@ pub const Hittable = struct {
         return self.iface.call("boundingBox", .{});
     }
 
-    pub fn deinit(rc: Rc(Hittable)) void {
-        const obj = rc.weakRef();
-        
-        if (rc.tagged_data_ptr.ref_count == 1) {
-            obj.iface.call("deinit", .{});
-            obj.iface.deinit();
+    pub fn deinit(self: *const Hittable) void {
+        self.ref_count.* -= 1;
+        if (self.ref_count.* == 0) {
+            self.iface.call("deinit", .{});
+            self.iface.deinit();
+            self.allocator.destroy(self.ref_count);
         }
-        rc.deinit();
     }
 };
 
 pub const HittableList = struct {
-    list: List(Rc(Hittable)),
+    list: List(Hittable),
     allocator: std.mem.Allocator,
     bbox: Aabb = Aabb{},
     const Self = @This();
@@ -72,7 +86,7 @@ pub const HittableList = struct {
     pub fn init(allocator: std.mem.Allocator) Self {
         return Self{
             .allocator = allocator,
-            .list = List(Rc(Hittable)).init(allocator),
+            .list = List(Hittable).init(allocator),
         };
     }
 
@@ -80,7 +94,7 @@ pub const HittableList = struct {
         var hit_record: ?HitRecord = null;
         var closest = ray_t.max;
         for (self.list.items) |obj| {
-            if (obj.weakRef().hit(ray, Interval.new(ray_t.min, closest))) |rec| {
+            if (obj.hit(ray, Interval.new(ray_t.min, closest))) |rec| {
                 // if (hit_record) |hr| Material.deinit(hr.mat);
                 closest = rec.t;
                 hit_record = rec;
@@ -106,7 +120,7 @@ pub const HittableList = struct {
     }
 
     pub fn clearRetainingCapacity(self: *Self) void {
-        for (self.list.items) |h| Hittable.deinit(h);
+        for (self.list.items) |*h| h.deinit();
         self.list.clearRetainingCapacity();
     }
 };

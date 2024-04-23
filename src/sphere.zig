@@ -13,17 +13,18 @@ const Aabb = @import("aabb.zig");
 center: Vec3,
 center_mov: ?Vec3 = null,
 radius: f64,
-mat: Rc(Material),
+mat: Material,
 bbox: Aabb = Aabb{},
 
 const Self = @This();
 
-pub fn new(center: Vec3, center_mov: ?Vec3, radius: f64, mat: Rc(Material)) Self {
+pub fn new(center: Vec3, center_mov: ?Vec3, radius: f64, mat: Material) Self {
     const rvec = vec3.vec3s(radius);
     var bbox = Aabb.new(center - rvec, center + rvec);
     if (center_mov) |c2| bbox = bbox.combined(Aabb.new(c2 - rvec, c2 + rvec));
     return Self{
         .center = center,
+        .center_mov = center_mov,
         .radius = @max(radius, 0.0),
         .mat = mat,
         .bbox = bbox,
@@ -31,7 +32,7 @@ pub fn new(center: Vec3, center_mov: ?Vec3, radius: f64, mat: Rc(Material)) Self
 }
 
 pub fn deinit(self: *Self) void {
-    Material.deinit(self.mat);
+    self.mat.deinit();
 }
 
 pub fn boundingBox(self: *const Self) Aabb {
@@ -60,7 +61,7 @@ pub fn hit(self: *const Self, ray: Ray, ray_t: Interval) ?HitRecord {
     var rec = HitRecord{
         .t = root,
         .p = ray.at(root),
-        .mat = self.mat.weakRef(),
+        .mat = self.mat,
     };
     const outward_normal = (rec.p - self.center) / vec3.vec3s(self.radius);
     rec.setFaceNormal(ray, outward_normal);

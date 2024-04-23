@@ -1,4 +1,5 @@
-const mem = @import("std").mem;
+const std = @import("std");
+const Allocator = std.mem.Allocator;
 
 // TODO: This could be an interface so it can be more easily usable with other interfaces.
 pub fn RefCounted(comptime T: type) type {
@@ -9,12 +10,12 @@ pub fn RefCounted(comptime T: type) type {
             // TODO: Figure out a way to not have to separately allocate the data.
             data: T,
             ref_count: usize,
-            allocator: mem.Allocator,
+            allocator: Allocator,
         };
 
         tagged_data_ptr: *TaggedData,
 
-        pub fn init(allocator: mem.Allocator) !Self {
+        pub fn init(allocator: Allocator) !Self {
             const tagged_data_ptr = try allocator.create(TaggedData);
 
             tagged_data_ptr.* = TaggedData{

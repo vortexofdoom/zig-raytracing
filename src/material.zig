@@ -8,6 +8,9 @@ const Vec3 = vec3.Vec3;
 const Ray = @import("ray.zig");
 const Rc = @import("rc.zig").RefCounted;
 const rand = @import("util.zig").random;
+const texture = @import("texture.zig");
+const Texture = texture.Texture;
+const Allocator = @import("std").mem.Allocator;
 
 pub const Scatter = struct {
     attenuation: Vec3,
@@ -17,30 +20,47 @@ pub const Scatter = struct {
 pub const Material = struct {
     const IFace = Interface(struct {
         scatter: *const fn (*const SelfType, Ray, HitRecord) ?Scatter,
+        deinit: *const fn (*const SelfType) void,
     }, interface.Storage.Owning);
 
     iface: IFace,
+    ref_count: *usize,
+    allocator: Allocator,
 
-    pub fn init(obj: anytype, allocator: @import("std").mem.Allocator) !Rc(Material) {
-        const rc = try Rc(Material).init(allocator);
-        rc.weakRef().* = Material{
+    pub fn init(obj: anytype, allocator: Allocator) !Material {
+        const ref_count = try allocator.create(usize);
+        ref_count.* = 1;
+        return Material{
             .iface = try IFace.init(obj, allocator),
+            .ref_count = ref_count,
+            .allocator = allocator,
         };
-        return rc;
+    }
+
+    pub fn strongRef(self: *const Material) Material {
+        self.ref_count.* += 1;
+        return Material{
+            .iface = self.iface,
+            .ref_count = self.ref_count,
+        };
     }
 
     pub fn scatter(self: *const Material, ray: Ray, rec: HitRecord) ?Scatter {
         return self.iface.call("scatter", .{ ray, rec });
     }
 
-    pub fn deinit(rc: Rc(Material)) void {
-        if (rc.tagged_data_ptr.ref_count == 1) rc.weakRef().iface.deinit();
-        rc.deinit();
+    pub fn deinit(self: *const Material) void {
+        self.ref_count.* -= 1;
+        if (self.ref_count.* == 0) {
+            self.iface.call("deinit", .{});
+            self.iface.deinit();
+            self.allocator.destroy(self.ref_count);
+        }
     }
 };
 
 pub const Lambertian = struct {
-    albedo: Vec3,
+    tex: Texture,
 
     pub fn scatter(self: *const Lambertian, in: Ray, rec: HitRecord) ?Scatter {
         var scatter_dir: Vec3 = rec.normal + vec3.randomUnitVec();
@@ -48,13 +68,17 @@ pub const Lambertian = struct {
         if (@reduce(.And, @abs(scatter_dir) < vec3.vec3s(1e-8))) scatter_dir = rec.normal;
 
         return Scatter{
-            .attenuation = self.albedo,
+            .attenuation = self.tex.value(rec.u, rec.v, rec.p),
             .ray = Ray{
                 .origin = rec.p,
                 .dir = scatter_dir,
                 .time = in.time,
             },
         };
+    }
+
+    pub fn deinit(self: *const Lambertian) void {
+        self.tex.deinit();
     }
 };
 
@@ -75,6 +99,8 @@ pub const Metal = struct {
             },
         } else null;
     }
+
+    pub fn deinit(_: *const Metal) void {}
 };
 
 pub const Dielectric = struct {
@@ -101,4 +127,6 @@ pub const Dielectric = struct {
         const r1 = r0 * r0;
         return r1 + (1.0 - r1) * @import("std").math.pow(f64, 1 - cos, 5);
     }
+
+    pub fn deinit(_: *const Dielectric) void {}
 };
