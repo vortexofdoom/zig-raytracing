@@ -28,6 +28,7 @@ const Perlin = @import("perlin.zig");
 const ImageTex = texture.ImageTex;
 const zstbi = @import("zstbi");
 const Image = zstbi.Image;
+const Quad = @import("quad.zig");
 
 const inf = std.math.inf(f64);
 const pi = std.math.pi;
@@ -60,14 +61,40 @@ pub fn main() !void {
         .defocus_angle = 0.6,
         .focus_dist = 10.0,
     };
-    try switch (3) {
+    try switch (4) {
         0 => bouncingSpheres(-11.0, 11.0, gpa, stdout, &camera),
         1 => checkeredSpheres(gpa, stdout, &camera),
         2 => earth(gpa, stdout, &camera),
         3 => perlin(gpa, stdout, &camera),
+        4 => quads(gpa, stdout, &camera),
         else => unreachable
     };
     try bw.flush(); // don't forget to flush!
+}
+
+pub fn quads(alloc: std.mem.Allocator, writer: anytype, camera: *Camera) !void {
+    var world = HittableList.init(alloc);
+
+    const left_red = try Material.init(Lambertian{ .tex = try Texture.init( Solid{.albedo = Vec3{ 1.0, 0.2, 0.2 }}, alloc)}, alloc);
+    const back_green = try Material.init(Lambertian{ .tex = try Texture.init( Solid{.albedo = Vec3{ 0.2, 1.0, 0.2 }}, alloc)}, alloc);
+    const right_blue = try Material.init(Lambertian{ .tex = try Texture.init( Solid{.albedo = Vec3{ 0.2, 0.2, 1.0 }}, alloc)}, alloc);
+    const upper_orange = try Material.init(Lambertian{ .tex = try Texture.init( Solid{.albedo = Vec3{ 1.0, 0.5, 0.0 }}, alloc)}, alloc);
+    const lower_teal = try Material.init(Lambertian{ .tex = try Texture.init( Solid{.albedo = Vec3{ 0.2, 0.8, 0.8 }}, alloc)}, alloc);
+
+    try world.add(Quad.init(Vec3{-3.0, -2.0, 5.0}, Vec3{0.0, 0.0, -4.0}, Vec3{0.0, 4.0, 0.0}, left_red));
+    try world.add(Quad.init(Vec3{-2.0, -2.0, 0.0}, Vec3{4.0, 0.0, 0.0}, Vec3{0.0, 4.0, 0.0}, back_green));
+    try world.add(Quad.init(Vec3{3.0, -2.0, 1.0}, Vec3{0.0, 0.0, 4.0}, Vec3{0.0, 4.0, 0.0}, right_blue));
+    try world.add(Quad.init(Vec3{-2.0, 3.0, 1.0}, Vec3{4.0, 0.0, 0.0}, Vec3{0.0, 0.0, 4.0}, upper_orange));
+    try world.add(Quad.init(Vec3{-2.0, -3.0, 5.0}, Vec3{4.0, 0.0, 0.0}, Vec3{0.0, 0.0, -4.0}, lower_teal));
+    
+    const hittable = try Hittable.init(world, alloc);
+    defer hittable.deinit();
+    camera.look_from = Vec3{0.0, 0.0, 9.0};
+    camera.look_at = vec3s(0.0);
+    camera.defocus_angle = 0.0;
+    camera.vfov = 80.0;
+    camera.aspect_ratio = 1.0;
+    try camera.render(hittable, writer);
 }
 
 pub fn perlin(alloc: std.mem.Allocator, writer: anytype, camera: *Camera) !void {
@@ -185,4 +212,5 @@ test "test_deinit" {
     try checkeredSpheres(ta, Writer{}, &camera);
     try earth(ta, Writer{}, &camera);
     try perlin(ta, Writer{}, &camera);
+    try quads(ta, Writer{}, &camera);
 }

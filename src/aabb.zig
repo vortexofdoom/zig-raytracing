@@ -30,6 +30,19 @@ pub fn longestAxis(self: *Self) usize {
     return if (diff[a] > diff[2]) a else 2;
 }
 
+const min_delta = 0.0001;
+
+fn padToMin(self: *Self) void {
+    const d = vec3s(min_delta);
+    self.expand(@select(Vec3, (self.max - self.min) < d, d, vec3s(0.0)));
+}
+
+fn expand(self: *Self, delta: Vec3) void {
+    const delta_v = delta / vec3s(2.0);
+    self.max += delta_v;
+    self.min -= delta_v;
+}
+
 pub fn combined(a: Self, b: Self) Self {
     return Self{
         .max = @max(a.max, b.max),
