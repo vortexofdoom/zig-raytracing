@@ -4,17 +4,19 @@ const vec3s = vec3.vec3s;
 const Ray = @import("ray.zig");
 const std = @import("std");
 const List = std.ArrayList;
-const Rc = @import("rc.zig").RefCounted;
 const interface = @import("interface");
 const SelfType = interface.SelfType;
 const Interface = interface.Interface;
 const Interval = @import("interval.zig");
 const Material = @import("material.zig").Material;
 const Aabb = @import("aabb.zig");
+const Perlin = @import("perlin.zig");
+const Image = @import("zstbi").Image;
+const clamp = std.math.clamp;
 
 pub const Texture = struct {
     const IFace = Interface(struct {
-        value: *const fn (*const SelfType, f64, f64, Vec3) Vec3,
+        value: *const fn (*SelfType, f64, f64, Vec3) Vec3,
         deinit: *const fn (*SelfType) void,
     }, interface.Storage.Owning);
 
@@ -37,6 +39,7 @@ pub const Texture = struct {
         return Texture{
             .iface = self.iface,
             .ref_count = self.ref_count,
+            .allocator = self.allocator,
         };
     }
 
@@ -69,25 +72,25 @@ pub const Checker = struct {
     even: Texture,
     odd: Texture,
 
-    pub fn init(scale: f64, even: Rc(Texture), odd: Rc(Texture)) Checker {
+    pub fn init(scale: f64, even: Texture, odd: Texture) Checker {
         return Checker{
-            .scale = scale,
+            .scale = 1.0 / scale,
             .even = even,
             .odd = odd,
         };
     }
 
-    pub fn initColor(scale: f64, left: Vec3, right: Vec3, allocator: std.mem.Allocator) !Checker {
+    pub fn initColor(scale: f64, even: Vec3, odd: Vec3, allocator: std.mem.Allocator) !Checker {
         return Checker{
-            .scale = scale,
-            .even = try Texture.init(Solid{ .albedo = left}, allocator),
-            .odd = try Texture.init(Solid{ .albedo = right}, allocator),
+            .scale = 1.0 / scale,
+            .even = try Texture.init(Solid{ .albedo = even}, allocator),
+            .odd = try Texture.init(Solid{ .albedo = odd}, allocator),
         };
     }
 
     pub fn value(self: *const Checker, u: f64, v: f64, p: Vec3) Vec3 {
         const scale = vec3s(self.scale);
-        const is_even = @as(i64, @intFromFloat(@reduce(.Add, @floor(scale * p)))) & 1 == 0;
+        const is_even = @reduce(.Add, @as(@Vector(3, i64), @intFromFloat(@floor(scale * p)))) & 1 == 0;
         return if (is_even)
             self.even.value(u, v, p)
         else
@@ -97,5 +100,35 @@ pub const Checker = struct {
     pub fn deinit(self: *const Checker) void {
         self.even.deinit();        
         self.odd.deinit();
+    }
+};
+
+pub const ImageTex = struct {
+    img: Image,
+
+    pub fn value(self: *const ImageTex, u: f64, v: f64, _: Vec3) Vec3 {
+        const u_clamp = clamp(u, 0.0, 1.0);
+        const v_clamp = 1.0 - clamp(v, 0.0, 1.0);
+
+        const i = @as(usize, @intFromFloat(u_clamp * @as(f64, @floatFromInt(self.img.width))));
+        const j = @as(usize, @intFromFloat(v_clamp * @as(f64, @floatFromInt(self.img.height))));
+        return @import("img.zig").pixelData(&self.img, i, j) / vec3s(255.0);
+    }
+
+    pub fn deinit(self: *ImageTex) void {
+        self.img.deinit();
+    }
+};
+
+pub const Noise = struct {
+    noise: Perlin,
+    scale: f64,
+
+    pub fn value(self: *Noise, _: f64, _: f64, p: Vec3) Vec3 {
+        return vec3s(0.5) * (vec3s(1.0) + self.noise.noise(p * vec3s(self.scale)));
+    }
+
+    pub fn deinit(self: *Noise) void {
+        self.noise.deinit();
     }
 };

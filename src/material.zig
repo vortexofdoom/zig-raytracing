@@ -42,6 +42,7 @@ pub const Material = struct {
         return Material{
             .iface = self.iface,
             .ref_count = self.ref_count,
+            .allocator = self.allocator,
         };
     }
 

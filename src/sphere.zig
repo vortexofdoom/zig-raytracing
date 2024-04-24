@@ -7,8 +7,8 @@ const Hittable = hittable.Hittable;
 const HitRecord = hittable.HitRecord;
 const Interval = @import("interval.zig");
 const Material = @import("material.zig").Material;
-const Rc = @import("rc.zig").RefCounted;
 const Aabb = @import("aabb.zig");
+const std = @import("std");
 
 center: Vec3,
 center_mov: ?Vec3 = null,
@@ -29,6 +29,16 @@ pub fn new(center: Vec3, center_mov: ?Vec3, radius: f64, mat: Material) Self {
         .mat = mat,
         .bbox = bbox,
     };
+}
+
+/// Given `p`, a point on the unit sphere,
+/// returns `u`, the angle around the Y axis from X=-1
+/// and `v`, the angle from Y=-1 to Y=1
+pub fn uv(p: Vec3) struct {f64, f64} {
+    const pi = std.math.pi;
+    const theta = std.math.acos(-p[1]);
+    const phi = std.math.atan2(-p[2], p[0]) + pi;
+    return .{phi / (2 * pi), theta / pi};
 }
 
 pub fn deinit(self: *Self) void {
@@ -64,6 +74,7 @@ pub fn hit(self: *const Self, ray: Ray, ray_t: Interval) ?HitRecord {
         .mat = self.mat,
     };
     const outward_normal = (rec.p - self.center) / vec3.vec3s(self.radius);
+    rec.u, rec.v = Self.uv(outward_normal);
     rec.setFaceNormal(ray, outward_normal);
     return rec;
 }

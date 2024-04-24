@@ -19,6 +19,9 @@
             .url = "https://github.com/vortexofdoom/interface.zig/archive/d12ff621c484a3aeb7167c071baa68b51f914d83.tar.gz",
             .hash = "1220b1bfa04dadeea21044a1a703a7ac20b2ee5841b07240c667eaca8cf3991dfb7f",
         },
+        .zstbi = .{
+            .path = "../zig-gamedev/libs/zstbi",
+        }
     },
     .paths = .{
         // This makes *all* files, recursively, included in this package. It is generally

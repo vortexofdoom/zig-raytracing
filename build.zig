@@ -36,8 +36,11 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
 
-    const interface = b.dependency("interface", .{}).module("interface.zig");
-    exe.root_module.addImport("interface", interface);
+    const interface = b.dependency("interface", .{});
+    exe.root_module.addImport("interface", interface.module("interface.zig"));
+    const zstbi = b.dependency("zstbi", .{});
+    exe.root_module.addImport("zstbi", zstbi.module("root"));
+    exe.linkLibrary(zstbi.artifact("zstbi"));
 
     // This declares intent for the executable to be installed into the
     // standard location when the user invokes the "install" step (the default
@@ -85,7 +88,9 @@ pub fn build(b: *std.Build) void {
 
     const run_exe_unit_tests = b.addRunArtifact(exe_unit_tests);
 
-    exe_unit_tests.root_module.addImport("interface", interface);
+    exe_unit_tests.root_module.addImport("interface", interface.module("interface.zig"));
+    exe_unit_tests.root_module.addImport("zstbi", zstbi.module("root"));
+    exe_unit_tests.linkLibrary(zstbi.artifact("zstbi"));
 
     // Similar to creating the run step earlier, this exposes a `test` step to
     // the `zig build --help` menu, providing a way for the user to request

@@ -23,6 +23,11 @@ const texture = @import("texture.zig");
 const Texture = texture.Texture;
 const Solid = texture.Solid;
 const Checker = texture.Checker;
+const Noise = texture.Noise;
+const Perlin = @import("perlin.zig");
+const ImageTex = texture.ImageTex;
+const zstbi = @import("zstbi");
+const Image = zstbi.Image;
 
 const inf = std.math.inf(f64);
 const pi = std.math.pi;
@@ -33,6 +38,8 @@ pub const gpa = gpa_impl.allocator();
 
 pub fn main() !void {
     @import("util.zig").init();
+    zstbi.init(gpa);
+    defer zstbi.deinit();
     // stdout is for the actual output of your application, for example if you
     // are implementing gzip, then only the compressed bytes should be sent to
     // stdout, not any debugging messages.
@@ -40,46 +47,99 @@ pub fn main() !void {
     var bw = std.io.bufferedWriter(stdout_file);
     const stdout = bw.writer();
 
+    // Camera
+    var camera = Camera{
+        .aspect_ratio = 16.0 / 9.0,
+        .img_width = 400,
+        .samples_per_pixel = 100,
+        .max_depth = 50,
+        .vfov = 20.0,
+        .look_from = Vec3{13.0, 2.0, 3.0},
+        .look_at = Vec3{0.0, 0.0, 0.0},
+        .vup = Vec3{0.0, 1.0, 0.0},
+        .defocus_angle = 0.6,
+        .focus_dist = 10.0,
+    };
+    try switch (3) {
+        0 => bouncingSpheres(-11.0, 11.0, gpa, stdout, &camera),
+        1 => checkeredSpheres(gpa, stdout, &camera),
+        2 => earth(gpa, stdout, &camera),
+        3 => perlin(gpa, stdout, &camera),
+        else => unreachable
+    };
+    try bw.flush(); // don't forget to flush!
+}
 
+pub fn perlin(alloc: std.mem.Allocator, writer: anytype, camera: *Camera) !void {
+    const perl = try Material.init(Lambertian{ .tex = try Texture.init(Noise{ .noise = try Perlin.init(alloc), .scale = 4.0}, alloc)}, alloc);
+    var world = HittableList.init(alloc);
+    try world.add(Sphere.new(Vec3{0.0, -1000.0, 0.0}, null, 1000.0, perl));
+    try world.add(Sphere.new(Vec3{0.0, 2.0, 0.0}, null, 2.0, perl));
+    const hittable = try Hittable.init(world, alloc);
+    defer hittable.deinit();
+    try camera.render(hittable, writer);
+}
+
+pub fn earth(alloc: std.mem.Allocator, writer: anytype, camera: *Camera) !void {
+    camera.look_from = Vec3{0.0, 0.0, 12.0};
+    const img = try Image.loadFromFile("earthmap.jpg", 0);
+    const earth_tex = try Texture.init(ImageTex{ .img = img }, alloc);
+    const surface = try Material.init(Lambertian{ .tex = earth_tex }, alloc);
+    const globe = try Hittable.init(Sphere.new(Vec3{0.0, 0.0, 0.0}, null, 2.0, surface), alloc);
+    defer globe.deinit();
+    try camera.render(globe, writer);
+}
+
+pub fn checkeredSpheres(alloc: std.mem.Allocator, writer: anytype, camera: *Camera) !void {
+    var world = HittableList.init(alloc);
+    const checker = try Material.init(Lambertian { .tex = try Texture.init(try Checker.initColor(0.32, Vec3{0.2, 0.3, 0.1}, Vec3{0.9, 0.9, 0.9}, alloc), alloc) }, alloc);
+    try world.add(try Hittable.init(Sphere.new(Vec3{0.0, -10.0, 0.0}, null, 10.0, checker), alloc));
+    try world.add(try Hittable.init(Sphere.new(Vec3{0.0, 10.0, 0.0}, null, 10.0, checker.strongRef()), alloc));
+    const hittable = try Hittable.init(world, alloc);
+    defer hittable.deinit();
+    try camera.render(hittable, writer);
+}
+
+pub fn bouncingSpheres(lo: f64, hi: f64, alloc: std.mem.Allocator, writer: anytype, camera: *Camera) !void {
     // World
-    var world = HittableList.init(gpa);
-    const mat1 = try Material.init(Dielectric{.refraction_idx = 1.50}, gpa);
+    var world = HittableList.init(alloc);
+    const mat1 = try Material.init(Dielectric{.refraction_idx = 1.50}, alloc);
     try world.add(Sphere.new(Vec3{0.0, 1.0, 0.0}, null, 1.0, mat1));
-    const mat2 = try Material.init(Lambertian{ .tex = try Texture.init(Solid{.albedo =  Vec3{0.4, 0.2, 0.1}}, gpa)}, gpa);
+    const mat2 = try Material.init(Lambertian{ .tex = try Texture.init(Solid{.albedo =  Vec3{0.4, 0.2, 0.1}}, alloc)}, alloc);
     try world.add(Sphere.new(Vec3{-4.0, 1.0, 0.0}, null, 1.0, mat2));
     const mat3 = try Material.init(
         Metal{ 
             .albedo = Vec3{0.7, 0.6, 0.5},
             .fuzz = 0.0,
         },
-        gpa
+        alloc
     );
     try world.add(Sphere.new(Vec3{4.0, 1.0, 0.0}, null, 1.0, mat3));
     //const mat_ground = try Material.init(Lambertian{ .albedo = Vec3{0.5, 0.5, 0.5}}, gpa);
-    const checker = try texture.Texture.init(try texture.Checker.initColor(0.32, Vec3{0.2, 0.3, 0.1}, Vec3{0.9, 0.9, 0.9}, gpa), gpa);
-    try world.add(Sphere.new(Vec3{ 0.0, -1000.0, -1.0 }, null, 1000.0, try Material.init(Lambertian { .tex = try Texture.init(checker, gpa) }, gpa)));
+    const checker = try texture.Texture.init(try texture.Checker.initColor(0.32, Vec3{0.2, 0.3, 0.1}, Vec3{0.9, 0.9, 0.9}, alloc), alloc);
+    try world.add(Sphere.new(Vec3{ 0.0, -1000.0, -1.0 }, null, 1000.0, try Material.init(Lambertian { .tex = try Texture.init(checker, alloc) }, alloc)));
 
-    var a: f64 = -11.0;
-    while (a < 11.0) : (a += 1.0) {
-        var b: f64 = -11.0;
-        while (b < 11.0) : (b += 1.0) {
+    var a = lo;
+    while (a < hi) : (a += 1.0) {
+        var b = lo;
+        while (b < hi) : (b += 1.0) {
             const choose_mat = rand();
             const center = Vec3{ a + 0.9 * rand(), 0.2, b + 0.9 * rand()};
             if (vec3.length(center - Vec3{4.0, 0.2, 0.0}) > 0.9) {
                 const mat = if (choose_mat < 0.8) try Material.init(
                     Lambertian{ 
                         .tex = try Texture.init(Solid{ .albedo = vec3.random() * vec3.random()}, 
-                        gpa)
+                        alloc)
                     },
-                    gpa,
+                    alloc,
                 )
                 else if (choose_mat < 0.95) try Material.init(
                     Metal{
                         .albedo = vec3.randomRange(0.5, 1.0), 
                         .fuzz = util.randRange(0.0, 0.5),
                     },
-                    gpa,
-                ) else try Material.init(Dielectric{ .refraction_idx = 1.5 }, gpa);
+                    alloc,
+                ) else try Material.init(Dielectric{ .refraction_idx = 1.5 }, alloc);
                 try world.add(Sphere.new(
                     center,
                     Vec3{0.0, util.randRange(0.0, 0.5), 0.0},
@@ -90,95 +150,29 @@ pub fn main() !void {
         }
     }
 
-    const hittable = try Hittable.init(try Bvh.new(&world), gpa);
+    const hittable = try Hittable.init(try Bvh.new(&world), alloc);
     defer hittable.deinit();
     //const hittable = try Hittable.init(world, gpa);
 
-    // Camera
-    var camera = Camera{
-        .aspect_ratio = 16.0 / 9.0,
-        .img_width = 400,
-        .samples_per_pixel = 100,
-        .max_depth = 50.0,
-        .vfov = 20.0,
-        .look_from = Vec3{13.0, 2.0, 3.0},
-        .look_at = Vec3{0.0, 0.0, 0.0},
-        .vup = Vec3{0.0, 1.0, 0.0},
-        .defocus_angle = 0.6,
-        .focus_dist = 10.0,
-    };
-
-    try camera.render(hittable, stdout);
-
-    try bw.flush(); // don't forget to flush!
+    try camera.render(hittable, writer);
 }
 
 test "test_deinit" {
     const ta = std.testing.allocator;
+    zstbi.init(ta);
+    defer zstbi.deinit();
 
     @import("util.zig").init();
     const Writer = struct {
         pub fn print(_: @This(), _: []const u8, _: anytype) !void {}
     };
 
-    // World
-    var world = HittableList.init(ta);
-
-    const mat1 = try Material.init(Dielectric{.refraction_idx = 1.50}, ta);
-    try world.add(Sphere.new(Vec3{0.0, 1.0, 0.0}, null, 1.0, mat1));
-    const mat2 = try Material.init(Lambertian{ .tex = try Texture.init(Solid{.albedo =  Vec3{0.4, 0.2, 0.1}}, ta)}, ta);
-    try world.add(Sphere.new(Vec3{-4.0, 1.0, 0.0}, null, 1.0, mat2));
-    const mat3 = try Material.init(
-        Metal{ 
-            .albedo = Vec3{0.7, 0.6, 0.5},
-            .fuzz = 0.0,
-        },
-        ta
-    );
-    try world.add(Sphere.new(Vec3{4.0, 1.0, 0.0}, null, 1.0, mat3));
-    const checker = try texture.Texture.init(try texture.Checker.initColor(0.32, Vec3{0.2, 0.3, 0.1}, Vec3{0.9, 0.9, 0.9}, ta), ta);
-    try world.add(Sphere.new(Vec3{ 0.0, -1000.0, -1.0 }, null, 1000.0, try Material.init(Lambertian { .tex = try Texture.init(checker, ta) }, ta)));
-
-    var a: f64 = -4.0;
-    while (a < 4.0) : (a += 1.0) {
-        var b: f64 = -4.0;
-        while (b < 4.0) : (b += 1.0) {
-            const choose_mat = rand();
-            const center = Vec3{ a + 0.9 * rand(), 0.2, b + 0.9 * rand()};
-            if (vec3.length(center - Vec3{4.0, 0.2, 0.0}) > 0.9) {
-                const mat = if (choose_mat < 0.8) try Material.init(
-                    Lambertian{ 
-                        .tex = try Texture.init(Solid{ .albedo = vec3.random() * vec3.random()}, 
-                        ta)
-                    },
-                    ta,
-                )
-                else if (choose_mat < 0.95) try Material.init(
-                    Metal{
-                        .albedo = vec3.randomRange(0.5, 1.0), 
-                        .fuzz = util.randRange(0.0, 0.5),
-                    },
-                    ta,
-                ) else try Material.init(Dielectric{ .refraction_idx = 1.5 }, ta);
-                try world.add(Sphere.new(
-                    center,
-                    Vec3{0.0, util.randRange(0.0, 0.5), 0.0},
-                    0.2,
-                    mat,
-                ));
-            }
-        }
-    }
-    
-    const hittable = try Hittable.init(try Bvh.new(&world), gpa);
-    defer hittable.deinit();
-
     // Camera
     var camera = Camera{
         .aspect_ratio = 16.0 / 9.0,
         .img_width = 40,
-        .samples_per_pixel = 5,
-        .max_depth = 10.0,
+        .samples_per_pixel = 10,
+        .max_depth = 10,
         .vfov = 20.0,
         .look_from = Vec3{13.0, 2.0, 3.0},
         .look_at = Vec3{0.0, 0.0, 0.0},
@@ -187,10 +181,8 @@ test "test_deinit" {
         .focus_dist = 10.0,
     };
 
-    try camera.render(hittable, Writer{});
-    try std.testing.expectEqual(1, mat1.ref_count.*);
-    try std.testing.expectEqual(1, mat2.ref_count.*);
-    try std.testing.expectEqual(1, mat3.ref_count.*);
-    try std.testing.expectEqual(1, checker.ref_count.*);
-    try std.testing.expectEqual(1, hittable.ref_count.*);
+    try bouncingSpheres(-4.0, 4.0, ta, Writer{}, &camera);
+    try checkeredSpheres(ta, Writer{}, &camera);
+    try earth(ta, Writer{}, &camera);
+    try perlin(ta, Writer{}, &camera);
 }
