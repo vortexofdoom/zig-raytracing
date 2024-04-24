@@ -47,7 +47,7 @@ fn permute(p: []i32) void {
     }
 }
 
-pub fn noise(self: *Self, p: Vec3) Vec3 {
+pub fn noise(self: *const Self, p: Vec3) Vec3 {
     const floor = @floor(p);
     const uvw = p - floor;
     const ijk = @as(@Vector(3, isize), @intFromFloat(floor));
@@ -62,6 +62,20 @@ pub fn noise(self: *Self, p: Vec3) Vec3 {
         }
     }
     return perlinInterp(c, uvw);
+}
+
+pub fn turb(self: *const Self, p: Vec3, depth: usize) Vec3 {
+    var temp = p;
+    var weight = vec3s(1.0);
+    var accum = vec3s(0.0);
+    const scale = vec3s(2.0);
+    for (0..depth) |_| {
+        accum += weight * self.noise(temp);
+        weight /= scale;
+        temp *= scale;
+    }
+
+    return @abs(accum);
 }
 
 /// This feels like it could be done with vectors instead of a 3D array

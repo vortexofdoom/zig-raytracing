@@ -125,7 +125,7 @@ pub const Noise = struct {
     scale: f64,
 
     pub fn value(self: *Noise, _: f64, _: f64, p: Vec3) Vec3 {
-        return vec3s(0.5) * (vec3s(1.0) + self.noise.noise(p * vec3s(self.scale)));
+        return vec3s(0.5) * (vec3s(1.0) + std.math.sin(vec3s(self.scale * p[2]) + vec3s(10.0) * self.noise.turb(p, 7)));
     }
 
     pub fn deinit(self: *Noise) void {
