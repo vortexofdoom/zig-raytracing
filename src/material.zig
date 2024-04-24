@@ -19,8 +19,9 @@ pub const Scatter = struct {
 
 pub const Material = struct {
     const IFace = Interface(struct {
-        scatter: *const fn (*const SelfType, Ray, HitRecord) ?Scatter,
+        scatter: ?*const fn (*const SelfType, Ray, HitRecord) ?Scatter,
         deinit: *const fn (*const SelfType) void,
+        emitted: ?*const fn (*const SelfType, f64, f64, Vec3) Vec3,
     }, interface.Storage.Owning);
 
     iface: IFace,
@@ -37,6 +38,10 @@ pub const Material = struct {
         };
     }
 
+    pub fn emitted(self: *const Material, u: f64, v: f64, p: Vec3) Vec3 {
+        return self.iface.call("emitted", .{u, v, p}) orelse vec3.vec3s(0.0);
+    }
+
     pub fn strongRef(self: *const Material) Material {
         self.ref_count.* += 1;
         return Material{
@@ -47,7 +52,7 @@ pub const Material = struct {
     }
 
     pub fn scatter(self: *const Material, ray: Ray, rec: HitRecord) ?Scatter {
-        return self.iface.call("scatter", .{ ray, rec });
+        return self.iface.call("scatter", .{ ray, rec }) orelse null;
     }
 
     pub fn deinit(self: *const Material) void {
@@ -130,4 +135,20 @@ pub const Dielectric = struct {
     }
 
     pub fn deinit(_: *const Dielectric) void {}
+};
+
+pub const DiffuseLight = struct {
+    tex: Texture,
+    
+    pub fn init(color: Vec3, allocator: Allocator) !DiffuseLight {
+        return DiffuseLight{.tex = try Texture.init(texture.Solid{.albedo = color}, allocator)};
+    }
+
+    pub fn emitted(self: *const DiffuseLight, u: f64, v: f64, p: Vec3) Vec3 {
+        return self.tex.value(u, v, p);
+    }
+
+    pub fn deinit(self: *const DiffuseLight) void {
+        self.tex.deinit();
+    }
 };

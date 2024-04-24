@@ -29,6 +29,7 @@ const ImageTex = texture.ImageTex;
 const zstbi = @import("zstbi");
 const Image = zstbi.Image;
 const Quad = @import("quad.zig");
+const DiffuseLight = material.DiffuseLight;
 
 const inf = std.math.inf(f64);
 const pi = std.math.pi;
@@ -61,15 +62,33 @@ pub fn main() !void {
         .defocus_angle = 0.6,
         .focus_dist = 10.0,
     };
-    try switch (4) {
+    try switch (5) {
         0 => bouncingSpheres(-11.0, 11.0, gpa, stdout, &camera),
         1 => checkeredSpheres(gpa, stdout, &camera),
         2 => earth(gpa, stdout, &camera),
         3 => perlin(gpa, stdout, &camera),
         4 => quads(gpa, stdout, &camera),
+        5 => simpleLight(gpa, stdout, &camera),
         else => unreachable
     };
     try bw.flush(); // don't forget to flush!
+}
+
+pub fn simpleLight(alloc: std.mem.Allocator, writer: anytype, camera: *Camera) !void {
+    const perl = try Material.init(Lambertian{ .tex = try Texture.init(Noise{ .noise = try Perlin.init(alloc), .scale = 4.0}, alloc)}, alloc);
+    camera.look_from = Vec3{26.0, 3.0, 6.3};
+    camera.look_at = Vec3{0.0, 2.0, 1.0};
+    camera.bg_color = vec3s(0.0);
+    var world = HittableList.init(alloc);
+    try world.add(Sphere.new(Vec3{0.0, -1000.0, 0.0}, null, 1000.0, perl));
+    try world.add(Sphere.new(Vec3{0.0, 2.0, 0.0}, null, 2.0, perl.strongRef()));
+
+    const diff_light = try Material.init(try DiffuseLight.init(vec3s(4.0), alloc), alloc);
+    try world.add(Quad.init(Vec3{3.0, 1.0, -2.0}, Vec3{2.0, 0.0, 0.0}, Vec3{0.0, 2.0, 0.0}, diff_light));
+    try world.add(Sphere.new(Vec3{0.0, 7.0, 0.0}, null, 2.0, diff_light.strongRef()));
+    const hittable = try Hittable.init(world, alloc);
+    defer hittable.deinit();
+    try camera.render(hittable, writer);
 }
 
 pub fn quads(alloc: std.mem.Allocator, writer: anytype, camera: *Camera) !void {
@@ -213,4 +232,5 @@ test "test_deinit" {
     try earth(ta, Writer{}, &camera);
     try perlin(ta, Writer{}, &camera);
     try quads(ta, Writer{}, &camera);
+    try simpleLight(ta, Writer{}, &camera);
 }

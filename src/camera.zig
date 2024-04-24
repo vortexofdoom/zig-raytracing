@@ -46,6 +46,8 @@ focus_dist: f64 = 10.0,
 defocus_disc_u: Vec3 = undefined,
 /// Defocus disc vertical radius
 defocus_disc_v: Vec3 = undefined,
+/// Background color
+bg_color: Vec3 = Vec3{0.70, 0.80, 1.00},
 
 const Self = @This();
 
@@ -67,7 +69,7 @@ pub fn render(self: *Self, obj: Hittable, writer: anytype) !void {
             var pixel_color = vec3s(0.0);
             for (0..self.samples_per_pixel) |_| {
                 const ray = self.getRay(i, j);
-                pixel_color += rayColor(ray, self.max_depth, obj);
+                pixel_color += self.rayColor(ray, self.max_depth, obj);
             }
             try writeColor(pixel_color * vec3s(self.pixel_samples_scale), writer);
         }
@@ -103,17 +105,13 @@ fn defocusDiscSample(self: *const Self) Vec3 {
     + (vec3.swizzle(p, .y, .y, .y) * self.defocus_disc_v);
 }
 
-pub fn rayColor(ray: Ray, depth: usize, obj: Hittable) Vec3 {
+pub fn rayColor(self: *const Self, ray: Ray, depth: usize, obj: Hittable) Vec3 {
     if (depth == 0) return vec3s(0.0);
-    if (obj.hit(ray, Interval.new(0.001, inf))) |rec| {
-        if (rec.mat.scatter(ray, rec)) |s| {
-            return s.attenuation * rayColor(s.ray, depth - 1, obj);
-        }
-        return vec3s(0.0);
-    }
+    const rec = obj.hit(ray, Interval.new(0.001, inf)) orelse return self.bg_color;
+    const emission = rec.mat.emitted(rec.u, rec.v, rec.p);
 
-    const a = 0.5 * (normalize(ray.dir)[1] + 1.0);
-    return vec3s(1.0 - a) + vec3s(a) * Vec3{ 0.5, 0.7, 1.0 };
+    const scatter = rec.mat.scatter(ray, rec) orelse return emission;
+    return scatter.attenuation * self.rayColor(scatter.ray, depth - 1, obj) + emission;
 }
 
 pub fn init(self: *Self) void {
