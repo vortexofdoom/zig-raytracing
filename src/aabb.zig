@@ -37,6 +37,13 @@ fn padToMin(self: *Self) void {
     self.expand(@select(Vec3, (self.max - self.min) < d, d, vec3s(0.0)));
 }
 
+pub fn offset(self: *const Self, v: Vec3) Self {
+    return Self{
+        .max = self.max + v,
+        .min = self.min + v,
+    };
+}
+
 fn expand(self: *Self, delta: Vec3) void {
     const delta_v = delta / vec3s(2.0);
     self.max += delta_v;

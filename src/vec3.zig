@@ -2,6 +2,8 @@ const util = @import("util.zig");
 const rand = util.random;
 const randRange = util.randRange;
 pub const Vec3 = @Vector(3, f64);
+pub const unit = vec3s(1.0);
+pub const zero = vec3s(0.0);
 
 vec: Vec3,
 

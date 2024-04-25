@@ -30,10 +30,10 @@ const zstbi = @import("zstbi");
 const Image = zstbi.Image;
 const Quad = @import("quad.zig");
 const DiffuseLight = material.DiffuseLight;
+const Transform = @import("transform.zig");
 
 const inf = std.math.inf(f64);
 const pi = std.math.pi;
-const white = vec3s(1.0);
 
 var gpa_impl = std.heap.GeneralPurposeAllocator(.{}){};
 pub const gpa = gpa_impl.allocator();
@@ -62,20 +62,57 @@ pub fn main() !void {
         .defocus_angle = 0.6,
         .focus_dist = 10.0,
     };
-    try switch (5) {
+    try switch (6) {
         0 => bouncingSpheres(-11.0, 11.0, gpa, stdout, &camera),
         1 => checkeredSpheres(gpa, stdout, &camera),
         2 => earth(gpa, stdout, &camera),
         3 => perlin(gpa, stdout, &camera),
         4 => quads(gpa, stdout, &camera),
         5 => simpleLight(gpa, stdout, &camera),
+        6 => edit: {
+            camera.aspect_ratio = 1.0;
+            camera.vfov = 40.0;
+            camera.img_width = 600;
+            camera.samples_per_pixel = 200;
+            camera.bg_color = vec3.zero;
+            camera.look_from = Vec3{278.0, 278.0, -800.0};
+            camera.look_at = Vec3{278.0, 278.0, 0.0};
+            camera.defocus_angle = 0.0;
+            break :edit cornellBox(gpa, stdout, &camera);
+        },
         else => unreachable
     };
     try bw.flush(); // don't forget to flush!
 }
 
+pub fn cornellBox(alloc: std.mem.Allocator, writer: anytype, camera: *Camera) !void {
+    const red = try Lambertian.initColor(Vec3{0.65, 0.05, 0.05}, alloc);
+    const white = try Lambertian.initColor(Vec3{0.73, 0.73, 0.73}, alloc);
+    const green = try Lambertian.initColor(Vec3{0.12, 0.45, 0.15}, alloc);
+    const light = try DiffuseLight.init(vec3s(15.0), alloc);
+
+    var world = HittableList.init(alloc);
+    try world.add(Quad.init(Vec3{555.0, 0.0, 0.0}, Vec3{0.0, 555.0, 0.0}, Vec3{0.0, 0.0, 555.0}, green));
+    try world.add(Quad.init(Vec3{0.0, 0.0, 0.0}, Vec3{0.0, 555.0, 0.0}, Vec3{0.0, 0.0, 555.0}, red));
+    try world.add(Quad.init(Vec3{343.0, 554.0, 332.0}, Vec3{-130.0, 0.0, 0.0}, Vec3{0.0, 0.0, -105.0}, light));
+    try world.add(Quad.init(Vec3{0.0, 0.0, 0.0}, Vec3{555.0, 0.0, 0.0}, Vec3{0.0, 0.0, 555.0}, white));
+    try world.add(Quad.init(Vec3{555.0, 555.0, 555.0}, Vec3{-555.0, 0.0, 0.0}, Vec3{0.0, 0.0, -555.0}, white.strongRef()));
+    try world.add(Quad.init(Vec3{0.0, 0.0, 555.0}, Vec3{555.0, 0.0, 0.0}, Vec3{0.0, 555.0, 0.0}, white.strongRef()));
+
+
+    const box1 = Transform.init(try hit.box(Vec3{0.0, 0.0, 0.0}, Vec3{165.0, 330.0, 165.0}, white.strongRef()), 15.0, Vec3{265.0, 0.0, 295.0});
+    const box2 = Transform.init(try hit.box(Vec3{0.0, 0.0, 0.0}, Vec3{165.0, 165.0, 165.0}, white.strongRef()), -18.0, Vec3{130.0, 0.0, 65.0});
+
+    try world.add(box1);
+    try world.add(box2);
+
+    const hittable = try Hittable.init(world, alloc);
+    defer hittable.deinit();
+    try camera.render(hittable, writer);
+}
+
 pub fn simpleLight(alloc: std.mem.Allocator, writer: anytype, camera: *Camera) !void {
-    const perl = try Material.init(Lambertian{ .tex = try Texture.init(Noise{ .noise = try Perlin.init(alloc), .scale = 4.0}, alloc)}, alloc);
+    const perl = try Lambertian.init(try Noise.init(4.0, alloc));
     camera.look_from = Vec3{26.0, 3.0, 6.3};
     camera.look_at = Vec3{0.0, 2.0, 1.0};
     camera.bg_color = vec3s(0.0);
@@ -83,7 +120,7 @@ pub fn simpleLight(alloc: std.mem.Allocator, writer: anytype, camera: *Camera) !
     try world.add(Sphere.new(Vec3{0.0, -1000.0, 0.0}, null, 1000.0, perl));
     try world.add(Sphere.new(Vec3{0.0, 2.0, 0.0}, null, 2.0, perl.strongRef()));
 
-    const diff_light = try Material.init(try DiffuseLight.init(vec3s(4.0), alloc), alloc);
+    const diff_light = try DiffuseLight.init(vec3s(4.0), alloc);
     try world.add(Quad.init(Vec3{3.0, 1.0, -2.0}, Vec3{2.0, 0.0, 0.0}, Vec3{0.0, 2.0, 0.0}, diff_light));
     try world.add(Sphere.new(Vec3{0.0, 7.0, 0.0}, null, 2.0, diff_light.strongRef()));
     const hittable = try Hittable.init(world, alloc);
@@ -94,11 +131,11 @@ pub fn simpleLight(alloc: std.mem.Allocator, writer: anytype, camera: *Camera) !
 pub fn quads(alloc: std.mem.Allocator, writer: anytype, camera: *Camera) !void {
     var world = HittableList.init(alloc);
 
-    const left_red = try Material.init(Lambertian{ .tex = try Texture.init( Solid{.albedo = Vec3{ 1.0, 0.2, 0.2 }}, alloc)}, alloc);
-    const back_green = try Material.init(Lambertian{ .tex = try Texture.init( Solid{.albedo = Vec3{ 0.2, 1.0, 0.2 }}, alloc)}, alloc);
-    const right_blue = try Material.init(Lambertian{ .tex = try Texture.init( Solid{.albedo = Vec3{ 0.2, 0.2, 1.0 }}, alloc)}, alloc);
-    const upper_orange = try Material.init(Lambertian{ .tex = try Texture.init( Solid{.albedo = Vec3{ 1.0, 0.5, 0.0 }}, alloc)}, alloc);
-    const lower_teal = try Material.init(Lambertian{ .tex = try Texture.init( Solid{.albedo = Vec3{ 0.2, 0.8, 0.8 }}, alloc)}, alloc);
+    const left_red = try Lambertian.initColor(Vec3{ 1.0, 0.2, 0.2 }, alloc);
+    const back_green = try Lambertian.initColor(Vec3{ 0.2, 1.0, 0.2 }, alloc);
+    const right_blue = try Lambertian.initColor(Vec3{ 0.2, 0.2, 1.0 }, alloc);
+    const upper_orange = try Lambertian.initColor(Vec3{ 1.0, 0.5, 0.0 }, alloc);
+    const lower_teal = try Lambertian.initColor(Vec3{ 0.2, 0.8, 0.8 }, alloc);
 
     try world.add(Quad.init(Vec3{-3.0, -2.0, 5.0}, Vec3{0.0, 0.0, -4.0}, Vec3{0.0, 4.0, 0.0}, left_red));
     try world.add(Quad.init(Vec3{-2.0, -2.0, 0.0}, Vec3{4.0, 0.0, 0.0}, Vec3{0.0, 4.0, 0.0}, back_green));
@@ -117,7 +154,7 @@ pub fn quads(alloc: std.mem.Allocator, writer: anytype, camera: *Camera) !void {
 }
 
 pub fn perlin(alloc: std.mem.Allocator, writer: anytype, camera: *Camera) !void {
-    const perl = try Material.init(Lambertian{ .tex = try Texture.init(Noise{ .noise = try Perlin.init(alloc), .scale = 4.0}, alloc)}, alloc);
+    const perl = try Lambertian.init(try Noise.init(4.0, alloc));
     var world = HittableList.init(alloc);
     try world.add(Sphere.new(Vec3{0.0, -1000.0, 0.0}, null, 1000.0, perl));
     try world.add(Sphere.new(Vec3{0.0, 2.0, 0.0}, null, 2.0, perl));
@@ -128,9 +165,8 @@ pub fn perlin(alloc: std.mem.Allocator, writer: anytype, camera: *Camera) !void 
 
 pub fn earth(alloc: std.mem.Allocator, writer: anytype, camera: *Camera) !void {
     camera.look_from = Vec3{0.0, 0.0, 12.0};
-    const img = try Image.loadFromFile("earthmap.jpg", 0);
-    const earth_tex = try Texture.init(ImageTex{ .img = img }, alloc);
-    const surface = try Material.init(Lambertian{ .tex = earth_tex }, alloc);
+    const earth_tex = try ImageTex.initFile("earthmap.jpg", alloc);
+    const surface = try Lambertian.init(earth_tex);
     const globe = try Hittable.init(Sphere.new(Vec3{0.0, 0.0, 0.0}, null, 2.0, surface), alloc);
     defer globe.deinit();
     try camera.render(globe, writer);
@@ -138,7 +174,7 @@ pub fn earth(alloc: std.mem.Allocator, writer: anytype, camera: *Camera) !void {
 
 pub fn checkeredSpheres(alloc: std.mem.Allocator, writer: anytype, camera: *Camera) !void {
     var world = HittableList.init(alloc);
-    const checker = try Material.init(Lambertian { .tex = try Texture.init(try Checker.initColor(0.32, Vec3{0.2, 0.3, 0.1}, Vec3{0.9, 0.9, 0.9}, alloc), alloc) }, alloc);
+    const checker = try Lambertian.init(try Checker.initColor(0.32, Vec3{0.2, 0.3, 0.1}, Vec3{0.9, 0.9, 0.9}, alloc));
     try world.add(try Hittable.init(Sphere.new(Vec3{0.0, -10.0, 0.0}, null, 10.0, checker), alloc));
     try world.add(try Hittable.init(Sphere.new(Vec3{0.0, 10.0, 0.0}, null, 10.0, checker.strongRef()), alloc));
     const hittable = try Hittable.init(world, alloc);
@@ -151,7 +187,7 @@ pub fn bouncingSpheres(lo: f64, hi: f64, alloc: std.mem.Allocator, writer: anyty
     var world = HittableList.init(alloc);
     const mat1 = try Material.init(Dielectric{.refraction_idx = 1.50}, alloc);
     try world.add(Sphere.new(Vec3{0.0, 1.0, 0.0}, null, 1.0, mat1));
-    const mat2 = try Material.init(Lambertian{ .tex = try Texture.init(Solid{.albedo =  Vec3{0.4, 0.2, 0.1}}, alloc)}, alloc);
+    const mat2 = try Lambertian.init(try Solid.init(Vec3{0.4, 0.2, 0.1}, alloc));
     try world.add(Sphere.new(Vec3{-4.0, 1.0, 0.0}, null, 1.0, mat2));
     const mat3 = try Material.init(
         Metal{ 
@@ -161,9 +197,8 @@ pub fn bouncingSpheres(lo: f64, hi: f64, alloc: std.mem.Allocator, writer: anyty
         alloc
     );
     try world.add(Sphere.new(Vec3{4.0, 1.0, 0.0}, null, 1.0, mat3));
-    //const mat_ground = try Material.init(Lambertian{ .albedo = Vec3{0.5, 0.5, 0.5}}, gpa);
-    const checker = try texture.Texture.init(try texture.Checker.initColor(0.32, Vec3{0.2, 0.3, 0.1}, Vec3{0.9, 0.9, 0.9}, alloc), alloc);
-    try world.add(Sphere.new(Vec3{ 0.0, -1000.0, -1.0 }, null, 1000.0, try Material.init(Lambertian { .tex = try Texture.init(checker, alloc) }, alloc)));
+    const checker = try Checker.initColor(0.32, Vec3{0.2, 0.3, 0.1}, Vec3{0.9, 0.9, 0.9}, alloc);
+    try world.add(Sphere.new(Vec3{ 0.0, -1000.0, -1.0 }, null, 1000.0, try Lambertian.init(checker)));
 
     var a = lo;
     while (a < hi) : (a += 1.0) {
@@ -172,20 +207,13 @@ pub fn bouncingSpheres(lo: f64, hi: f64, alloc: std.mem.Allocator, writer: anyty
             const choose_mat = rand();
             const center = Vec3{ a + 0.9 * rand(), 0.2, b + 0.9 * rand()};
             if (vec3.length(center - Vec3{4.0, 0.2, 0.0}) > 0.9) {
-                const mat = if (choose_mat < 0.8) try Material.init(
-                    Lambertian{ 
-                        .tex = try Texture.init(Solid{ .albedo = vec3.random() * vec3.random()}, 
-                        alloc)
-                    },
-                    alloc,
-                )
-                else if (choose_mat < 0.95) try Material.init(
-                    Metal{
-                        .albedo = vec3.randomRange(0.5, 1.0), 
-                        .fuzz = util.randRange(0.0, 0.5),
-                    },
-                    alloc,
-                ) else try Material.init(Dielectric{ .refraction_idx = 1.5 }, alloc);
+                const mat = try if (choose_mat < 0.8)
+                    Lambertian.initColor(vec3.random() * vec3.random(), alloc)
+                else if (choose_mat < 0.95)
+                    Metal.init(vec3.randomRange(0.5, 1.0), util.randRange(0.0, 0.5), alloc)
+                else 
+                    Dielectric.init(1.5, alloc);
+
                 try world.add(Sphere.new(
                     center,
                     Vec3{0.0, util.randRange(0.0, 0.5), 0.0},
@@ -233,4 +261,5 @@ test "test_deinit" {
     try perlin(ta, Writer{}, &camera);
     try quads(ta, Writer{}, &camera);
     try simpleLight(ta, Writer{}, &camera);
+    try cornellBox(ta, Writer{}, &camera);
 }

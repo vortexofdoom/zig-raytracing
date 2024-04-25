@@ -11,6 +11,7 @@ const Interface = interface.Interface;
 const Interval = @import("interval.zig");
 const Material = @import("material.zig").Material;
 const Aabb = @import("aabb.zig");
+const Quad = @import("quad.zig");
 
 pub const HitRecord = struct {
     p: Vec3,
@@ -124,3 +125,29 @@ pub const HittableList = struct {
         self.list.clearRetainingCapacity();
     }
 };
+
+pub fn box(a: Vec3, b: Vec3, mat: Material) !Hittable {
+    const allocator = mat.allocator;
+    var sides = HittableList.init(allocator);
+    const min = @min(a, b);
+    const max = @max(a, b);
+
+    const diff = max - min;
+    const dx = Vec3{diff[0], 0.0, 0.0};
+    const dy = Vec3{0.0, diff[1], 0.0};
+    const dz = Vec3{0.0, 0.0, diff[2]};
+
+    const x: i32 = 0;
+    const y: i32 = 1;
+    const z: i32 = 2;
+
+    const M = @Vector(3, i32);
+    try sides.add(Quad.init(@shuffle(f64, min, max, M{x, y, ~z}), dx, dy, mat));
+    try sides.add(Quad.init(@shuffle(f64, min, max, M{~x, y, ~z}), -dz, dy, mat.strongRef()));
+    try sides.add(Quad.init(@shuffle(f64, min, max, M{~x, y, z}), -dx, dy, mat.strongRef()));
+    try sides.add(Quad.init(@shuffle(f64, min, max, M{x, y, z}), dz, dy, mat.strongRef()));
+    try sides.add(Quad.init(@shuffle(f64, min, max, M{x, ~y, ~z}), dx, -dz, mat.strongRef()));
+    try sides.add(Quad.init(@shuffle(f64, min, max, M{x, y, z}), dx, dz, mat.strongRef()));
+
+    return Hittable.init(sides, allocator);
+}

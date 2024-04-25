@@ -60,6 +60,10 @@ pub const Texture = struct {
 pub const Solid = struct {
     albedo: Vec3,
 
+    pub fn init(color: Vec3, allocator: std.mem.Allocator) !Texture {
+        return Texture.init(Solid{.albedo = color}, allocator);
+    }
+
     pub fn value(self: *const Solid, _: f64, _: f64, _: Vec3) Vec3 {
         return self.albedo;
     }
@@ -72,20 +76,17 @@ pub const Checker = struct {
     even: Texture,
     odd: Texture,
 
-    pub fn init(scale: f64, even: Texture, odd: Texture) Checker {
-        return Checker{
+    pub fn init(scale: f64, even: Texture, odd: Texture) !Texture {
+        return Texture.init(Checker{
             .scale = 1.0 / scale,
             .even = even,
             .odd = odd,
-        };
+        },
+        even.allocator);
     }
 
-    pub fn initColor(scale: f64, even: Vec3, odd: Vec3, allocator: std.mem.Allocator) !Checker {
-        return Checker{
-            .scale = 1.0 / scale,
-            .even = try Texture.init(Solid{ .albedo = even}, allocator),
-            .odd = try Texture.init(Solid{ .albedo = odd}, allocator),
-        };
+    pub fn initColor(scale: f64, even: Vec3, odd: Vec3, allocator: std.mem.Allocator) !Texture {
+        return Checker.init(scale, try Solid.init(even, allocator), try Solid.init(odd, allocator));
     }
 
     pub fn value(self: *const Checker, u: f64, v: f64, p: Vec3) Vec3 {
@@ -106,6 +107,11 @@ pub const Checker = struct {
 pub const ImageTex = struct {
     img: Image,
 
+    pub fn initFile(filename: [:0]const u8, alloc: std.mem.Allocator) !Texture {
+        const img = try Image.loadFromFile(filename, 0);
+        return Texture.init(ImageTex{ .img = img }, alloc);
+    }
+
     pub fn value(self: *const ImageTex, u: f64, v: f64, _: Vec3) Vec3 {
         const u_clamp = clamp(u, 0.0, 1.0);
         const v_clamp = 1.0 - clamp(v, 0.0, 1.0);
@@ -123,6 +129,10 @@ pub const ImageTex = struct {
 pub const Noise = struct {
     noise: Perlin,
     scale: f64,
+
+    pub fn init(scale: f64, allocator: std.mem.Allocator) !Texture {
+        return Texture.init(Noise {.noise = try Perlin.init(allocator), .scale = scale}, allocator);
+    }
 
     pub fn value(self: *Noise, _: f64, _: f64, p: Vec3) Vec3 {
         return vec3s(0.5) * (vec3s(1.0) + std.math.sin(vec3s(self.scale * p[2]) + vec3s(10.0) * self.noise.turb(p, 7)));

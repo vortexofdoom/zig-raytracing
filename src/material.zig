@@ -9,6 +9,7 @@ const Ray = @import("ray.zig");
 const Rc = @import("rc.zig").RefCounted;
 const rand = @import("util.zig").random;
 const texture = @import("texture.zig");
+const Solid = texture.Solid;
 const Texture = texture.Texture;
 const Allocator = @import("std").mem.Allocator;
 
@@ -68,6 +69,15 @@ pub const Material = struct {
 pub const Lambertian = struct {
     tex: Texture,
 
+    pub fn init(tex: Texture) !Material {
+        return Material.init(Lambertian{.tex = tex}, tex.allocator);
+    }
+
+    pub fn initColor(color: Vec3, allocator: Allocator) !Material {
+        const tex = try Solid.init(color, allocator);
+        return Material.init(Lambertian{ .tex = tex }, allocator);
+    }
+
     pub fn scatter(self: *const Lambertian, in: Ray, rec: HitRecord) ?Scatter {
         var scatter_dir: Vec3 = rec.normal + vec3.randomUnitVec();
         // Catch degenerate scatter direction
@@ -92,6 +102,10 @@ pub const Metal = struct {
     albedo: Vec3,
     fuzz: f64,
 
+    pub fn init(color: Vec3, fuzz: f64, allocator: Allocator) !Material {
+        return Material.init(Metal{ .albedo = color, .fuzz = fuzz}, allocator);
+    }
+
     pub fn scatter(self: *const Metal, in: Ray, rec: HitRecord) ?Scatter {
         var reflected = vec3.reflect(in.dir, rec.normal);
         reflected = vec3.normalize(reflected) + vec3.vec3s(self.fuzz) * vec3.randomUnitVec();
@@ -111,6 +125,10 @@ pub const Metal = struct {
 
 pub const Dielectric = struct {
     refraction_idx: f64,
+
+    pub fn init(ri: f64, allocator: Allocator) !Material {
+        return Material.init(Dielectric{.refraction_idx = ri}, allocator);
+    }
 
     pub fn scatter(self: *const Dielectric, in: Ray, rec: HitRecord) ?Scatter {
         const ri = if (rec.front) 1.0 / self.refraction_idx else self.refraction_idx;
@@ -140,8 +158,9 @@ pub const Dielectric = struct {
 pub const DiffuseLight = struct {
     tex: Texture,
     
-    pub fn init(color: Vec3, allocator: Allocator) !DiffuseLight {
-        return DiffuseLight{.tex = try Texture.init(texture.Solid{.albedo = color}, allocator)};
+    /// Colors brighter than (1, 1, 1) will emit light
+    pub fn init(color: Vec3, allocator: Allocator) !Material {
+        return Material.init(DiffuseLight{.tex = try Texture.init(texture.Solid{.albedo = color}, allocator)}, allocator);
     }
 
     pub fn emitted(self: *const DiffuseLight, u: f64, v: f64, p: Vec3) Vec3 {
