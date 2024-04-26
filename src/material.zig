@@ -171,3 +171,31 @@ pub const DiffuseLight = struct {
         self.tex.deinit();
     }
 };
+
+pub const Isotropic = struct {
+    tex: Texture,
+
+    pub fn init(tex: Texture) !Material {
+        return Material.init(Isotropic{.tex = tex}, tex.allocator);
+    }
+
+    pub fn initColor(color: Vec3, allocator: Allocator) !Material {
+        const tex = try Solid.init(color, allocator);
+        return Material.init(Isotropic{ .tex = tex }, allocator);
+    }
+
+    pub fn scatter(self: *const Isotropic, in: Ray, rec: HitRecord) ?Scatter {
+        return Scatter{
+            .ray = Ray{
+                .origin = rec.p,
+                .dir = vec3.randomUnitVec(),
+                .time = in.time,
+            },
+            .attenuation = self.tex.value(rec.u, rec.v, rec.p),
+        };
+    }
+
+    pub fn deinit(self: *const Isotropic) void {
+        self.tex.deinit();
+    }
+};

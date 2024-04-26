@@ -48,6 +48,8 @@ defocus_disc_u: Vec3 = undefined,
 defocus_disc_v: Vec3 = undefined,
 /// Background color
 bg_color: Vec3 = Vec3{0.70, 0.80, 1.00},
+sqrt_spp: usize = undefined,
+recip_sqrt_spp: f64 = undefined,
 
 const Self = @This();
 
@@ -67,9 +69,11 @@ pub fn render(self: *Self, obj: Hittable, writer: anytype) !void {
         std.log.info("\rScanlines remaining: {d} ", .{self.img_height - j});
         for (0..self.img_width) |i| {
             var pixel_color = vec3s(0.0);
-            for (0..self.samples_per_pixel) |_| {
-                const ray = self.getRay(i, j);
-                pixel_color += self.rayColor(ray, self.max_depth, obj);
+            for (0..self.sqrt_spp) |s_i| {
+                for (0..self.sqrt_spp) |s_j| {
+                    const ray = self.getRay(i, j, s_i, s_j);
+                    pixel_color += self.rayColor(ray, self.max_depth, obj);
+                }
             }
             try writeColor(pixel_color * vec3s(self.pixel_samples_scale), writer);
         }
@@ -81,12 +85,18 @@ fn sampleSquare() Vec3 {
     return Vec3{ rand() - 0.5, rand() - 0.5, 0.0 };
 }
 
+fn sampleSquareStratified(self: *const Self, i: usize, j: usize) Vec3 {
+    const px = ((@as(f64, @floatFromInt(i)) + rand()) * self.recip_sqrt_spp) - 0.5; 
+    const py = ((@as(f64, @floatFromInt(j)) + rand()) * self.recip_sqrt_spp) - 0.5; 
+    return Vec3{ px, py, 0.0 };
+}
+
 inline fn linearToGamma(linear: f64) f64 {
     return if (linear > 0.0) @sqrt(linear) else 0.0;
 }
 
-fn getRay(self: *const Self, i: usize, j: usize) Ray {
-    const offset = Vec3{ @floatFromInt(i), @floatFromInt(j), 0.0 } + sampleSquare();
+fn getRay(self: *const Self, i: usize, j: usize, s_i: usize, s_j: usize) Ray {
+    const offset = Vec3{ @floatFromInt(i), @floatFromInt(j), 0.0 } + self.sampleSquareStratified(s_i, s_j);
     const pixel_sample = self.pixel00_loc 
         + vec3.swizzle(offset, .x, .x, .x) * self.pixel_delta_u
         + vec3.swizzle(offset, .y, .y, .y) * self.pixel_delta_v;
@@ -120,7 +130,12 @@ pub fn init(self: *Self) void {
     self.img_height = @intFromFloat(img_width_f / self.aspect_ratio);
     self.img_height = if (self.img_height == 0) 1 else self.img_height;
     const img_height_f: f64 = @floatFromInt(self.img_height);
-    self.pixel_samples_scale = 1.0 / @as(f64, @floatFromInt(self.samples_per_pixel));
+
+    const sqrt_spp = @sqrt(@as(f64, @floatFromInt(self.samples_per_pixel)));
+    self.sqrt_spp = @as(usize, @intFromFloat(sqrt_spp));
+    const sqrt_f = @as(f64, @floatFromInt(self.sqrt_spp));
+    self.recip_sqrt_spp = 1.0 / sqrt_f;
+    self.pixel_samples_scale = 1.0 / (sqrt_f * sqrt_f);
 
     self.center = self.look_from;
 
@@ -144,6 +159,7 @@ pub fn init(self: *Self) void {
     // Calculate position of upper left pixel
     const viewport_upper_left = self.center - (vec3s(self.focus_dist) * w) - (viewport_u / vec3s(2.0)) - (viewport_v / vec3s(2.0));
     self.pixel00_loc = viewport_upper_left + vec3s(0.5) * (self.pixel_delta_u + self.pixel_delta_v);
+
 
     const defocus_radius = self.focus_dist * @tan(std.math.degreesToRadians(self.defocus_angle / 2.0));
     self.defocus_disc_u = u * vec3s(defocus_radius);
